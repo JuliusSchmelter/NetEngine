@@ -1,15 +1,15 @@
-cmake_minimum_required(VERSION 3.0.0)
-project(BigEarthNet VERSION 1.0)
+cmake_minimum_required(VERSION 3.10)
+project(BigEarthNet)
 
-include(CTest)
-enable_testing()
+add_subdirectory(netlib)
 
 add_executable(BigEarthNet main.cpp)
 
-add_subdirectory(libs/eigen-3.4.0)
+target_link_libraries(BigEarthNet netlib)
+include_directories(netlib)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})

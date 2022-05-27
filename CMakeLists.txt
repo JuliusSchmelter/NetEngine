@@ -6,7 +6,7 @@ add_subdirectory(netlib)
 add_executable(BigEarthNet main.cpp)
 
 target_link_libraries(BigEarthNet netlib)
-include_directories(netlib)
+target_include_directories(BigEarthNet PUBLIC netlib)
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED True)

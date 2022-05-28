@@ -1,12 +1,17 @@
 #include "netlib/net.h"
 
-#include <iostream>
 
-#include "Eigen/Dense"
-
-void netlib::test()
+netlib::net::net(std::vector<int> layout)
 {
-    Eigen::Matrix2d test;
-    test << 1, 2, 3, 4;
-    std::cout << test;
+    for (int i = 0; i < layout.size() - 1; i++)
+    {
+        m_weights.push_back(new Eigen::MatrixXf(layout[i+1], layout[i]));
+    }
 }
+
+netlib::net::~net()
+{
+    for (const auto& i: m_weights) delete i;
+}
+
+

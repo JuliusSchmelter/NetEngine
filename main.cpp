@@ -5,6 +5,9 @@
 
 int main(void)
 {
-    std::vector<int> layout = {1,2,3,4};
-    netlib::net net(layout);
+    netlib::net testNet({3,2,3,2});
+    testNet.print();
+    testNet.set_random();
+    testNet.print();
+    std::cout << testNet.run({1.0, 2.0, 3.0});
 }

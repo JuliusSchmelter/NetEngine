@@ -1,7 +1,10 @@
-#include "netlib/net.h"
 #include <iostream>
+#include <vector>
+
+#include "netlib/net.h"
 
 int main(void)
 {
-    netlib::test();
+    std::vector<int> layout = {1,2,3,4};
+    netlib::net net(layout);
 }

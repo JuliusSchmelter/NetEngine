@@ -5,6 +5,9 @@
 		}
 	],
 	"settings": {
-		"makefile.extensionOutputFolder": "./.vscode"
+		"makefile.extensionOutputFolder": "./.vscode",
+		"files.associations": {
+			"vector": "cpp"
+		}
 	}
 }

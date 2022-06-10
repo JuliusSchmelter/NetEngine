@@ -7,7 +7,14 @@
 	"settings": {
 		"makefile.extensionOutputFolder": "./.vscode",
 		"files.associations": {
-			"vector": "cpp"
+			"vector": "cpp",
+			"iostream": "cpp",
+			"*.tcc": "cpp",
+			"exception": "cpp",
+			"string": "cpp",
+			"utility": "cpp",
+			"istream": "cpp",
+			"ostream": "cpp"
 		}
 	}
 }

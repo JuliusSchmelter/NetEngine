@@ -2,16 +2,35 @@
 #include <vector>
 
 #include "netlib/net.h"
+#include "netlib/timer.hpp"
 
 int main(void)
 {
-    netlib::net testNet({3,2,3,2});
+    netlib::timer t;
+    netlib::net testNet({20, 30, 30, 20});
     testNet.set_random();
-    testNet.print();
 
-    std::vector<float> input({0.1, 0.2, 0.3});
-    std::vector<float> output = testNet.run(input);
+    std::vector<float> floats_20({0.1, 0.9, 0.1, 0.9, 0.1, 0.9, 0.1,
+                                  0.9, 0.1, 0.9, 0.1, 0.9, 0.1, 0.9,
+                                  0.1, 0.9, 0.1, 0.9, 0.1, 0.9});
+
+    std::vector<uint8_t> ints_20(
+        {0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1});
+            
+    auto output = testNet.run(floats_20);
 
     for (auto const& i : output)
         std::cout << i << ' ';
+
+    // std::cout << std::endl;
+
+    // for (int i = 0; i < 100; i++)
+    // {
+    //     // testNet.train(floats_20, ints_20);
+    // }
+
+    // output = testNet.run(floats_20);
+
+    // for (auto i : output)
+    //     std::cout << i << ' ';
 }

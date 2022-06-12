@@ -9,18 +9,18 @@ namespace netlib
     class net
     {
     private:
-        std::vector<int> m_layout;
+        const std::vector<int> m_layout;
         std::vector<Eigen::MatrixXf*> m_weights;
 
-        float ReLU(float x);
-
     public:
-        net(std::vector<int> layout);
+        net(const std::vector<int>& _layout);
         ~net();
 
         void print();
         void set_random();
-        std::vector<float> run(std::vector<float>& _input);
+        std::vector<float> run(const std::vector<float>& _input);
+        void train(const std::vector<float>& _input,
+                   const std::vector<uint8_t>& _label);
     };
 }
 

@@ -4,18 +4,19 @@
 #include <iomanip>
 #include <iostream>
 
-netlib::net::net(std::vector<int> layout)
+netlib::net::net(const std::vector<int>& _layout) : m_layout(_layout)
 {
-    m_layout = layout;
-    for (int i = 0; i < layout.size() - 1; i++)
+    for (int i = 0; i < _layout.size() - 1; i++)
     {
-        m_weights.push_back(new Eigen::MatrixXf(layout[i + 1], layout[i]));
+        // add column for bias
+        m_weights.push_back(
+            new Eigen::MatrixXf(_layout[i + 1], _layout[i] + 1));
     }
 }
 
 netlib::net::~net()
 {
-    for (const auto& i : m_weights)
+    for (auto i : m_weights)
         delete i;
 }
 
@@ -23,15 +24,15 @@ void netlib::net::print()
 {
     std::cout << "##############################################\nlayout: |";
 
-    for (const auto& i : m_layout)
+    for (auto i : m_layout)
         std::cout << i << "|";
 
     std::cout << "\n\nweights:";
 
-    for (const auto& i : m_weights)
+    for (auto i : m_weights)
         std::cout << "\n----------------------------------------------\n"
                   << std::fixed << std::setprecision(3) << *i;
-                  
+
     std::cout << "\n----------------------------------------------\n";
 }
 
@@ -42,23 +43,55 @@ void netlib::net::set_random()
         i->setRandom();
 }
 
-float netlib::net::ReLU(float _x)
+std::vector<float> netlib::net::run(const std::vector<float>& _input)
 {
-    return (_x > 0.0f) ? _x : 0.0f;
-}
+    // check dimensions
+    if (_input.size() != m_layout.front())
+        throw netlib::dimension_error(_input.size(), m_layout.front());
 
-std::vector<float> netlib::net::run(std::vector<float>& _input)
-{
-    if (_input.size() != m_layout[0])
-        throw netlib::dimension_error(_input.size(), m_layout[0]);
+    // get Eigen vector for input, this does not copy the data
+    Eigen::Map<const Eigen::VectorXf> input(_input.data(), _input.size());
 
-    Eigen::Map<Eigen::VectorXf> input(_input.data(), _input.size());
+    // run first layer
+    // note: last column is bias
+    auto w = m_weights[0];
+    auto r = w->rows();
+    auto c = w->cols();
 
     Eigen::VectorXf temp =
-        (*m_weights[0] * input).unaryExpr([](float x) { return (x > 0.0f) ? x : 0.0f; });
+        (w->block(0, 0, r, c - 1) * input + w->block(0, c - 1, r, 1))
+            .unaryExpr([](float x) { return (x > 0.0f) ? x : 0.0f; });
 
+    // run remaining layers
     for (int i = 1; i < m_weights.size(); i++)
-        temp = (*m_weights[i] * temp).unaryExpr([](float x) { return (x > 0.0f) ? x : 0.0f; });
+    {
+        w = m_weights[i];
+        r = w->rows();
+        c = w->cols();
+
+        temp = (w->block(0, 0, r, c - 1) * temp + w->block(0, c - 1, r, 1))
+                   .unaryExpr([](float x) { return (x > 0.0f) ? x : 0.0f; });
+    }
 
     return std::vector<float>(temp.data(), temp.data() + temp.size());
+}
+
+void netlib::net::train(const std::vector<float>& _input,
+                        const std::vector<uint8_t>& _label)
+{
+    if (_input.size() != m_layout.front())
+        throw netlib::dimension_error(_input.size(), m_layout.front());
+
+    if (_label.size() != m_layout.back())
+        throw netlib::dimension_error(_label.size(), m_layout.back());
+
+    // Eigen::Map<Eigen::VectorXf> input(_input.data(), _input.size());
+    // Eigen::Map<Eigen::Vector<uint8_t, -1>> label(_label.data(),
+    // _label.size());
+
+    // Eigen::VectorXf output = run_eigen((Eigen::VectorXf*)&input);
+
+    // Eigen::VectorXf loss = label.cast<float>() - output;
+
+    // backpropagate(&loss);
 }

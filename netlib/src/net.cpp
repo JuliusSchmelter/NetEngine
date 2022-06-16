@@ -1,15 +1,21 @@
 #include "netlib/net.h"
 #include "netlib/exceptions.hpp"
 
+#include <cassert>
 #include <iomanip>
 #include <iostream>
 
-netlib::net::net(const std::vector<int>& _layout, float _eta, float _threshold)
-    : m_layout(_layout), m_eta(_eta), m_threshold(_threshold)
+netlib::net::net(const std::vector<int>& _layout, float _eta, float _eta_bias)
+    : m_layout(_layout), m_eta(_eta), m_eta_bias(_eta_bias)
 {
     // initialize weight matrices, add column for bias
     for (int i = 0; i < _layout.size() - 1; i++)
         m_weights.push_back(Eigen::MatrixXf(_layout[i + 1], _layout[i] + 1));
+}
+
+netlib::net::net(const std::vector<int>& _layout, float _eta)
+    : net(_layout, _eta, 0.2 * _eta)
+{
 }
 
 float netlib::net::get_eta()
@@ -22,14 +28,14 @@ void netlib::net::set_eta(float _eta)
     m_eta = _eta;
 }
 
-float netlib::net::get_threshold()
+float netlib::net::get_eta_bias()
 {
-    return m_threshold;
+    return m_eta_bias;
 }
 
-void netlib::net::set_threshold(float _threshold)
+void netlib::net::set_eta_bias(float _eta_bias)
 {
-    m_threshold = _threshold;
+    m_eta_bias = _eta_bias;
 }
 
 void netlib::net::print()
@@ -37,11 +43,11 @@ void netlib::net::print()
     // print layout
     std::cout << "##############################################\nlayout: |";
 
-    for (auto i : m_layout)
+    for (auto& i : m_layout)
         std::cout << i << "|";
 
     // print eta and threshold
-    std::cout << "\neta: " << m_eta << "\nthreshold: " << m_threshold;
+    std::cout << "\neta: " << m_eta << "\neta_bias: " << m_eta_bias;
 
     // print weights
     std::cout << " \nweights : ";
@@ -63,7 +69,7 @@ void netlib::net::set_random()
         i.setRandom();
 }
 
-std::vector<uint8_t> netlib::net::run(const std::vector<float>& _input)
+std::vector<float> netlib::net::run(const std::vector<float>& _input)
 {
     // check dimensions
     if (_input.size() != m_layout.front())
@@ -88,14 +94,7 @@ std::vector<uint8_t> netlib::net::run(const std::vector<float>& _input)
                 .unaryExpr([](float x) { return (x > 0.0f) ? x : 0.0f; });
     }
 
-    // get output by comparing with threshold
-    std::vector<uint8_t> output;
-    output.reserve(m_layout.back());
-
-    for (int i = 0; i < m_layout.back(); i++)
-        output.push_back(a[i] < m_threshold);
-
-    return output;
+    return std::vector<float>(a.data(), a.data() + a.size());
 }
 
 void netlib::net::train(const std::vector<float>& _input,
@@ -113,22 +112,22 @@ void netlib::net::train(const std::vector<float>& _input,
 
     // store activation values
     std::vector<Eigen::VectorXf> z(m_weights.size());
+    std::vector<Eigen::VectorXf> a(m_weights.size());
 
     // run first layer
     // note: last column is bias
     z[0] = m_weights[0].leftCols(m_weights[0].cols() - 1) * input +
            m_weights[0].col(m_weights[0].cols() - 1);
 
-    Eigen::VectorXf a =
-        z[0].unaryExpr([](float x) { return (x > 0.0f) ? x : 0.0f; });
+    a[0] = z[0].unaryExpr([](float x) { return (x > 0.0f) ? x : 0.0f; });
 
     // run remaining layers
     for (int i = 1; i < m_weights.size(); i++)
     {
-        z[i] = m_weights[i].leftCols(m_weights[i].cols() - 1) * a +
+        z[i] = m_weights[i].leftCols(m_weights[i].cols() - 1) * a[i - 1] +
                m_weights[i].col(m_weights[i].cols() - 1);
 
-        a = z[i].unaryExpr([](float x) { return (x > 0.0f) ? x : 0.0f; });
+        a[i] = z[i].unaryExpr([](float x) { return (x > 0.0f) ? x : 0.0f; });
     }
 
     // get storage for delta of each layer
@@ -141,13 +140,55 @@ void netlib::net::train(const std::vector<float>& _input,
     // threshold and label, then take hadamard product with first derivative
     // of ReLU of weighted input
     for (int i = 0; i < m_layout.back(); i++)
-        delta.back()[i] = ((a[i] < m_threshold) - _label[i]) *
-                          (z.back()[i] > 0.0f ? 1.0f : 0.0f);
+        delta.back()[i] =
+            (a.back()[i] - _label[i]) * (z.back()[i] > 0.0f ? 1.0f : 0.0f);
 
     // get delta of other layers. backpropagate delta of following layer, then
     // take hadamard product with first derivative of ReLU of weighted input
-    for (int i = m_weights.size() - 2; i >= 0; i--)
-        delta[i] = (m_weights[i + 1].transpose() * delta[i + 1])
-                       .cwiseProduct(z[i].unaryExpr(
-                           [](float x) { return (x > 0.0f) ? 1.0f : 0.0f; }));
+    for (int i = m_weights.size() - 1; i >= 1; i--)
+        delta[i - 1] =
+            (m_weights[i].leftCols(m_weights[i].cols() - 1).transpose() *
+             delta[i])
+                .cwiseProduct(z[i - 1].unaryExpr(
+                    [](float x) { return (x > 0.0f) ? 1.0f : 0.0f; }));
+
+    // apply delta to weights and biases
+    // weights
+    m_weights[0].leftCols(m_weights[0].cols() - 1) -=
+        m_eta * delta[0] * input.transpose();
+
+    // biases
+    m_weights[0].col(m_weights[0].cols() - 1) -= m_eta_bias * delta[0];
+
+    for (int i = 1; i < m_weights.size(); i++)
+    {
+        // weights
+        m_weights[i].leftCols(m_weights[i].cols() - 1) -=
+            m_eta * delta[i] * a[i - 1].transpose();
+
+        // biases
+        m_weights[i].col(m_weights[i].cols() - 1) -= m_eta_bias * delta[i];
+    }
+}
+
+float netlib::net::test(const std::vector<std::vector<float>>& _samples,
+                        const std::vector<uint8_t>& _labels)
+{
+    if (_samples.size() != _labels.size())
+        throw netlib::set_size_error(_samples.size(), _labels.size());
+
+    unsigned success = 0;
+
+    for (int i = 0; i < _samples.size(); i++)
+    {
+        std::vector<float> output = run(_samples[i]);
+
+        uint8_t result =
+            std::max_element(output.begin(), output.end()) - output.begin();
+
+        if (result == _labels[i])
+            success++;
+    }
+
+    return success / _samples.size();
 }

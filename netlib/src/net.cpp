@@ -40,6 +40,10 @@ void netlib::net::set_eta_bias(float _eta_bias)
 
 void netlib::net::print()
 {
+    // save stream format
+    std::ios streamfmt(nullptr);
+    streamfmt.copyfmt(std::cout);
+
     // print layout
     std::cout << "##############################################\nlayout: |";
 
@@ -57,6 +61,9 @@ void netlib::net::print()
                   << std::fixed << std::setprecision(3) << i;
 
     std::cout << "\n----------------------------------------------\n";
+
+    // restore stream format
+    std::cout.copyfmt(streamfmt);
 }
 
 void netlib::net::set_random()
@@ -83,7 +90,8 @@ std::vector<float> netlib::net::run(const std::vector<float>& _input)
     Eigen::VectorXf a =
         (m_weights[0].leftCols(m_weights[0].cols() - 1) * input +
          m_weights[0].col(m_weights[0].cols() - 1))
-            .unaryExpr([](float x) { return (x > 0.0f) ? x : 0.0f; });
+            .unaryExpr([](float x)
+                       { return 0.5f + 0.5f * x / (1.0f + fabsf(x)); });
 
     // run remaining layers
     for (int i = 1; i < m_weights.size(); i++)
@@ -91,7 +99,8 @@ std::vector<float> netlib::net::run(const std::vector<float>& _input)
         // note: eval() forces evaluation before new values are assigned to a
         a = ((m_weights[i].leftCols(m_weights[i].cols() - 1) * a).eval() +
              m_weights[i].col(m_weights[i].cols() - 1))
-                .unaryExpr([](float x) { return (x > 0.0f) ? x : 0.0f; });
+                .unaryExpr([](float x)
+                           { return 0.5f + 0.5f * x / (1.0f + fabsf(x)); });
     }
 
     return std::vector<float>(a.data(), a.data() + a.size());
@@ -119,7 +128,8 @@ void netlib::net::train(const std::vector<float>& _input,
     z[0] = m_weights[0].leftCols(m_weights[0].cols() - 1) * input +
            m_weights[0].col(m_weights[0].cols() - 1);
 
-    a[0] = z[0].unaryExpr([](float x) { return (x > 0.0f) ? x : 0.0f; });
+    a[0] = z[0].unaryExpr([](float x)
+                          { return 0.5f + 0.5f * x / (1.0f + fabsf(x)); });
 
     // run remaining layers
     for (int i = 1; i < m_weights.size(); i++)
@@ -127,7 +137,8 @@ void netlib::net::train(const std::vector<float>& _input,
         z[i] = m_weights[i].leftCols(m_weights[i].cols() - 1) * a[i - 1] +
                m_weights[i].col(m_weights[i].cols() - 1);
 
-        a[i] = z[i].unaryExpr([](float x) { return (x > 0.0f) ? x : 0.0f; });
+        a[i] = z[i].unaryExpr([](float x)
+                              { return 0.5f + 0.5f * x / (1.0f + fabsf(x)); });
     }
 
     // get storage for delta of each layer
@@ -141,7 +152,7 @@ void netlib::net::train(const std::vector<float>& _input,
     // of ReLU of weighted input
     for (int i = 0; i < m_layout.back(); i++)
         delta.back()[i] =
-            (a.back()[i] - _label[i]) * (z.back()[i] > 0.0f ? 1.0f : 0.0f);
+            (a.back()[i] - _label[i]) / (1.0f + powf(fabsf(z.back()[i]), 2));
 
     // get delta of other layers. backpropagate delta of following layer, then
     // take hadamard product with first derivative of ReLU of weighted input
@@ -150,7 +161,7 @@ void netlib::net::train(const std::vector<float>& _input,
             (m_weights[i].leftCols(m_weights[i].cols() - 1).transpose() *
              delta[i])
                 .cwiseProduct(z[i - 1].unaryExpr(
-                    [](float x) { return (x > 0.0f) ? 1.0f : 0.0f; }));
+                    [](float x) { return 1.0f / (1.0f + powf(fabsf(x), 2)); }));
 
     // apply delta to weights and biases
     // weights
@@ -190,5 +201,12 @@ float netlib::net::test(const std::vector<std::vector<float>>& _samples,
             success++;
     }
 
-    return success / _samples.size();
+    return (float)success / (float)_samples.size();
+}
+
+float test(const std::vector<std::vector<float>>& _samples,
+           const std::vector<std::vector<uint8_t>>& _labels)
+{
+    throw netlib::exception(
+        "multiple output test mode is not implemented yet.");
 }

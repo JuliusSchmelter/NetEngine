@@ -86,24 +86,14 @@ void MNIST_test()
         netlib::timer t("train net");
 
         // train net
-        for (int i = 0; i < 0; i++)
-            net.train(train[i], target[train_labels[i]]);
+        for (int i = 0; i < 300000; i++)
+            net.train(train[i % 60000], target[train_labels[i % 60000]]);
     }
 
     // test accuracy
-    // std::cout << 100 * net.test(test, test_labels) << '\n';
-
-    // for (auto i : test[1234])
-    //     std::cout << i << ' ';
-
-    // net.print();
+    std::cout << 100 * net.test(test, test_labels) << '\n';
 
     auto output = net.run(test[1234]);
     for (auto i : output)
         std::cout << i << ' ';
-
-    uint8_t res =
-        std::max_element(output.begin(), output.end()) - output.begin();
-
-    std::cout << '\n' << res;
 }

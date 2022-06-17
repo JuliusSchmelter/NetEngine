@@ -2,6 +2,7 @@
 #define NETLIB_TIMER_HPP
 
 #include <chrono>
+#include <iomanip>
 #include <iostream>
 
 namespace netlib
@@ -29,8 +30,28 @@ namespace netlib
             std::chrono::duration<float> duration =
                 std::chrono::high_resolution_clock::now() - m_start;
 
-            std::cout << "[" << m_name << " scope lived "
-                      << duration.count() * 1000.0f << " ms]" << std::endl;
+            // save stream format
+            std::ios streamfmt(nullptr);
+            streamfmt.copyfmt(std::cout);
+
+            // less than 100 ms
+            if (duration < std::chrono::duration<float>(0.1f))
+                std::cout << std::fixed << std::setprecision(2) << "[" << m_name
+                          << " scope lived " << duration.count() * 1000.0f
+                          << " ms]" << std::endl;
+            // less than 1 s
+            else if (duration < std::chrono::duration<float>(1.0f))
+                std::cout << std::fixed << std::setprecision(0) << "[" << m_name
+                          << " scope lived " << duration.count() * 1000.0f
+                          << " ms]" << std::endl;
+            // more than 1 s
+            else
+                std::cout << std::fixed << std::setprecision(2) << "[" << m_name
+                          << " scope lived " << duration.count() << " s]"
+                          << std::endl;
+
+            // restore stream format
+            std::cout.copyfmt(streamfmt);
         }
     };
 }

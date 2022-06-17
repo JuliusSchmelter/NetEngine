@@ -27,12 +27,15 @@ namespace netlib
 
         void print();
         void set_random();
-        // TODO: make array
         std::vector<float> run(const std::vector<float>& _input);
         void train(const std::vector<float>& _input,
                    const std::vector<uint8_t>& _label);
+        // single ouput
         float test(const std::vector<std::vector<float>>& _samples,
                    const std::vector<uint8_t>& _labels);
+        // multiple ouputs
+        float test(const std::vector<std::vector<float>>& _samples,
+                   const std::vector<std::vector<uint8_t>>& _labels);
     };
 }
 

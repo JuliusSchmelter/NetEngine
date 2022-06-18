@@ -27,12 +27,10 @@ namespace netlib
         }
     };
 
-    // vector dimensions do not fit net dimensions
     class dimension_error : public netlib::exception
     {
     public:
-        dimension_error(size_t _vector_size, size_t _layer_size)
-            : exception()
+        dimension_error(size_t _vector_size, size_t _layer_size) : exception()
         {
             m_message = "Dimension Error: vector size (" +
                         std::to_string(_vector_size) +
@@ -41,7 +39,6 @@ namespace netlib
         }
     };
 
-    // comparing sets of different sizes
     class set_size_error : public netlib::exception
     {
     public:
@@ -53,16 +50,38 @@ namespace netlib
         }
     };
 
-    // nets with less than three layers are not supported
     class not_enough_layers : public netlib::exception
     {
     public:
         not_enough_layers(size_t _n_layers) : exception()
         {
-            m_message =
-                "Not Enough Layers: nets with less than three layers are "
-                "not supported (tried " +
-                std::to_string(_n_layers) + " layers).";
+            m_message = "Layout Error: nets with less than three layers are "
+                        "not supported (tried " +
+                        std::to_string(_n_layers) + " layers).";
+        }
+    };
+
+    class batches_too_small : public netlib::exception
+    {
+    public:
+        batches_too_small(size_t _batch_size, size_t _n_threads) : exception()
+        {
+            m_message = "Batch Size Error: batch size (" +
+                        std::to_string(_batch_size) +
+                        ") is smaller than number of threads (" +
+                        std::to_string(_n_threads) + ").";
+        }
+    };
+
+    class batches_too_large : public netlib::exception
+    {
+    public:
+        batches_too_large(size_t _batch_size, size_t _n_samples) : exception()
+        {
+            m_message = "Batch Size Error: batch size (" +
+                        std::to_string(_batch_size) +
+                        ") is larger than number of samples (" +
+                        std::to_string(_n_samples) + ").";
         }
     };
 }

@@ -14,6 +14,8 @@ void MNIST_test()
     std::cout << "MNIST_test\n";
     netlib::timer t_master("master");
 
+//------------------------------------------------------------------------------
+
     // init net
     netlib::net net({28 * 28, 10, 10}, 0.01);
     net.set_random();
@@ -26,6 +28,8 @@ void MNIST_test()
         {0, 0, 0, 0, 1, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 1, 0, 0, 0, 0},
         {0, 0, 0, 0, 0, 0, 1, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
         {0, 0, 0, 0, 0, 0, 0, 0, 1, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 1}};
+
+//------------------------------------------------------------------------------
 
     // get storage
     std::vector<std::vector<uint8_t>> test_labels(N_TEST);
@@ -94,18 +98,24 @@ void MNIST_test()
         }
         examples.close();
     }
+    
+//------------------------------------------------------------------------------
+// train and test 
 
     {
         netlib::timer t("train net");
 
         // train net
-        for (int i = 0; i < 10000; i++)
-        {
-            net.train(train[i % N_TRAIN], train_labels[i % N_TRAIN]);
+        // for (int i = 0; i < 10000; i++)
+        // {
+        //     net.train(train[i % N_TRAIN], train_labels[i % N_TRAIN]);
 
-            if (i % 100 == 0)
-                std::cout << i << '\n';
-        }
+        //     if (i % 100 == 0)
+        //         std::cout << i << '\n';
+        // }
+
+        // train net
+        net.train(train, train_labels, 123, 5);
     }
 
     {

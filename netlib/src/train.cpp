@@ -1,6 +1,8 @@
 #include "netlib/exceptions.hpp"
 #include "netlib/net.h"
 
+#include <iostream>
+
 //------------------------------------------------------------------------------
 // calculate deltas for given samples and labels
 //------------------------------------------------------------------------------
@@ -16,9 +18,10 @@ void netlib::net::get_weight_mods(
         throw netlib::set_size_error(_samples.size(), _labels.size());
 
     // init weight mods
-    for (int i = 0; i < _weight_mods.size(); i++)
-        _weight_mods[i] =
-            Eigen::MatrixXf::Zero(m_weights[i].rows(), m_weights[i].cols());
+    _weight_mods.reserve(m_weights.size());
+    for (int i = 0; i < m_weights.size(); i++)
+        _weight_mods.push_back(
+            Eigen::MatrixXf::Zero(m_weights[i].rows(), m_weights[i].cols()));
 
     // temporary storage for activation values and deltas
     std::vector<Eigen::VectorXf> z(m_weights.size());
@@ -113,7 +116,7 @@ void netlib::net::train(const std::vector<float>& _sample,
                                                               _label.size()));
 
     // get vector for weight mods
-    std::vector<Eigen::MatrixXf> weight_mods(m_weights.size());
+    std::vector<Eigen::MatrixXf> weight_mods;
 
     // calculate weight mods
     get_weight_mods(sample, label, weight_mods);
@@ -130,10 +133,82 @@ void netlib::net::train(const std::vector<std::vector<float>>& _samples,
                         const std::vector<std::vector<uint8_t>>& _labels,
                         size_t _batch_size, size_t _n_threads)
 {
-    // check for wrong dimensions
+    // check for bad inputs
     if (_samples[0].size() != m_layout.front())
         throw netlib::dimension_error(_samples[0].size(), m_layout.front());
 
     if (_labels[0].size() != m_layout.back())
         throw netlib::dimension_error(_labels[0].size(), m_layout.back());
+
+    if (_samples.size() != _labels.size())
+        throw netlib::set_size_error(_samples.size(), _labels.size());
+
+    if (_batch_size < _n_threads)
+        throw netlib::batches_too_small(_batch_size, _n_threads);
+
+    if (_batch_size > _samples.size())
+        throw netlib::batches_too_large(_batch_size, _samples.size());
+
+    // plan training
+    size_t n_batches = 1 + _samples.size() / _batch_size;
+    size_t last_batch_size = _samples.size() % _batch_size;
+    if (last_batch_size < _n_threads)
+    {
+        n_batches--;
+        last_batch_size += _batch_size;
+    }
+
+    // position in _samples and _labels
+    size_t pos = 0;
+
+    // batch loop
+    for (int i = 0; i <= n_batches; i++)
+    {
+        // size of current batch
+        size_t batch_size;
+        if (i < n_batches)
+            batch_size = _batch_size;
+        else
+            batch_size = last_batch_size;
+
+        // samples per thread
+        size_t samples_per_thread = batch_size / _n_threads;
+        size_t remaining_samples = batch_size % _n_threads;
+
+        // allocate storage for threads
+        std::vector<std::vector<Eigen::MatrixXf>> weight_mods(_n_threads);
+
+        // get threads
+
+        // thread loop
+        for (int j = 0; j < _n_threads; j++)
+        {
+            // number of samples for current thread
+            size_t n;
+            if (j < remaining_samples)
+                n = samples_per_thread + 1;
+            else
+                n = samples_per_thread;
+
+            // get vectors of Eigen vectors for samples and labels, this does
+            // not copy the data
+            std::vector<Eigen::Map<const Eigen::VectorXf>> samples;
+            std::vector<Eigen::Map<const Eigen::VectorX<uint8_t>>> labels;
+            samples.reserve(n);
+            labels.reserve(n);
+            for (int k = 0; k < n; k++)
+            {
+                samples.push_back(Eigen::Map<const Eigen::VectorXf>(
+                    _samples[pos + k].data(), _samples[pos + k].size()));
+
+                labels.push_back(Eigen::Map<const Eigen::VectorX<uint8_t>>(
+                    _labels[pos + k].data(), _labels[pos + k].size()));
+            }
+
+            // dispatch thread
+
+            // increment position in _samples and _labels
+            pos += n;
+        }
+    }
 }

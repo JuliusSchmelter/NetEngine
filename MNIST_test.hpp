@@ -1,9 +1,23 @@
 #include <cassert>
 #include <fstream>
+#include <iostream>
+#include <vector>
+
+#include "netlib/net.h"
+#include "netlib/timer.hpp"
+
+#define N_TEST 10000
+#define N_TRAIN 60000
 
 void MNIST_test()
 {
     std::cout << "MNIST_test\n";
+    netlib::timer t_master("master");
+
+    // init net
+    netlib::net net({28 * 28, 10, 10}, 0.01);
+    net.set_random();
+    std::cout << "n_parameters: " << net.n_parameters() << '\n';
 
     // define targets
     std::vector<std::vector<uint8_t>> target = {
@@ -14,10 +28,10 @@ void MNIST_test()
         {0, 0, 0, 0, 0, 0, 0, 0, 1, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 1}};
 
     // get storage
-    std::vector<uint8_t> test_labels(10000);
-    std::vector<std::vector<float>> test(10000);
-    std::vector<uint8_t> train_labels(60000);
-    std::vector<std::vector<float>> train(60000);
+    std::vector<std::vector<uint8_t>> test_labels(N_TEST);
+    std::vector<std::vector<float>> test(N_TEST);
+    std::vector<std::vector<uint8_t>> train_labels(N_TRAIN);
+    std::vector<std::vector<float>> train(N_TRAIN);
 
     {
         netlib::timer t("load data");
@@ -28,14 +42,19 @@ void MNIST_test()
                     std::ios::binary);
         assert(labels);
         labels.seekg(8); // skip header
-        labels.read((char*)test_labels.data(), 10000);
+        for (int i = 0; i < N_TEST; i++)
+        {
+            uint8_t tmp;
+            labels.read((char*)&tmp, 1);
+            test_labels[i] = target[tmp];
+        }
         labels.close();
 
         std::ifstream examples;
         examples.open("C:/Code/BigEarthNet/data/mnist/test", std::ios::binary);
         assert(examples);
         examples.seekg(16); // skip header
-        for (int i = 0; i < 10000; i++)
+        for (int i = 0; i < N_TEST; i++)
         {
             test[i] = std::vector<float>(28 * 28);
             for (int j = 0; j < 28 * 28; j++)
@@ -52,13 +71,18 @@ void MNIST_test()
                     std::ios::binary);
         assert(labels);
         labels.seekg(8); // skip header
-        labels.read((char*)train_labels.data(), 60000);
+        for (int i = 0; i < N_TRAIN; i++)
+        {
+            uint8_t tmp;
+            labels.read((char*)&tmp, 1);
+            train_labels[i] = target[tmp];
+        }
         labels.close();
 
         examples.open("C:/Code/BigEarthNet/data/mnist/train", std::ios::binary);
         assert(examples);
         examples.seekg(16); // skip header
-        for (int i = 0; i < 60000; i++)
+        for (int i = 0; i < N_TRAIN; i++)
         {
             train[i].reserve(28 * 28);
             for (int j = 0; j < 28 * 28; j++)
@@ -71,9 +95,18 @@ void MNIST_test()
         examples.close();
     }
 
-    // init net
-    netlib::net net({28 * 28, 20, 10}, 0.001);
-    net.set_random();
+    {
+        netlib::timer t("train net");
+
+        // train net
+        for (int i = 0; i < 10000; i++)
+        {
+            net.train(train[i % N_TRAIN], train_labels[i % N_TRAIN]);
+
+            if (i % 100 == 0)
+                std::cout << i << '\n';
+        }
+    }
 
     {
         netlib::timer t("test accuracy");
@@ -81,19 +114,4 @@ void MNIST_test()
         // test accuracy
         std::cout << 100 * net.test(test, test_labels) << '\n';
     }
-
-    {
-        netlib::timer t("train net");
-
-        // train net
-        for (int i = 0; i < 300000; i++)
-            net.train(train[i % 60000], target[train_labels[i % 60000]]);
-    }
-
-    // test accuracy
-    std::cout << 100 * net.test(test, test_labels) << '\n';
-
-    auto output = net.run(test[1234]);
-    for (auto i : output)
-        std::cout << i << ' ';
 }

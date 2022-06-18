@@ -4,20 +4,31 @@
 #include <cassert>
 #include <iomanip>
 #include <iostream>
+#include <math.h>
 
-netlib::net::net(const std::vector<int>& _layout, float _eta, float _eta_bias)
+//------------------------------------------------------------------------------
+// constructor
+//------------------------------------------------------------------------------
+netlib::net::net(const std::vector<unsigned>& _layout, float _eta, float _eta_bias)
     : m_layout(_layout), m_eta(_eta), m_eta_bias(_eta_bias)
 {
+    // check min number of layers
+    if(_layout.size() < 3)
+        throw netlib::not_enough_layers(_layout.size());
+        
     // initialize weight matrices, add column for bias
     for (int i = 0; i < _layout.size() - 1; i++)
         m_weights.push_back(Eigen::MatrixXf(_layout[i + 1], _layout[i] + 1));
 }
 
-netlib::net::net(const std::vector<int>& _layout, float _eta)
+netlib::net::net(const std::vector<unsigned>& _layout, float _eta)
     : net(_layout, _eta, 0.2 * _eta)
 {
 }
 
+//------------------------------------------------------------------------------
+// get, set
+//------------------------------------------------------------------------------
 float netlib::net::get_eta()
 {
     return m_eta;
@@ -38,6 +49,9 @@ void netlib::net::set_eta_bias(float _eta_bias)
     m_eta_bias = _eta_bias;
 }
 
+//------------------------------------------------------------------------------
+// print net
+//------------------------------------------------------------------------------
 void netlib::net::print()
 {
     // save stream format
@@ -51,7 +65,8 @@ void netlib::net::print()
         std::cout << i << "|";
 
     // print eta and threshold
-    std::cout << "\neta: " << m_eta << "\neta_bias: " << m_eta_bias;
+    std::cout << "\neta: " << m_eta << "\neta_bias: " << m_eta_bias
+              << "\nn_parameters: " << n_parameters();
 
     // print weights
     std::cout << " \nweights : ";
@@ -66,24 +81,47 @@ void netlib::net::print()
     std::cout.copyfmt(streamfmt);
 }
 
+//------------------------------------------------------------------------------
+// get number of parameters
+//------------------------------------------------------------------------------
+size_t netlib::net::n_parameters()
+{
+    size_t n = 0;
+    for (const auto& i : m_weights)
+        n += i.rows() * i.cols();
+
+    return n;
+}
+
+//------------------------------------------------------------------------------
+// set weights to random values
+//------------------------------------------------------------------------------
 void netlib::net::set_random()
 {
     // seed random number generator to get new random numbers each time
     std::srand((unsigned int)std::time(0));
 
-    // set weight matrices to random values in range [-1, 1]
     for (auto& i : m_weights)
+    {
+        // set weight matrix to random values in range [-1, 1]
         i.setRandom();
+
+        // change range to [+- 1/sqrt(number of neurons in layer)]
+        i / sqrt(i.cols() - 1);
+    }
 }
 
-std::vector<float> netlib::net::run(const std::vector<float>& _input)
+//------------------------------------------------------------------------------
+// run example
+//------------------------------------------------------------------------------
+std::vector<float> netlib::net::run(const std::vector<float>& _sample)
 {
     // check dimensions
-    if (_input.size() != m_layout.front())
-        throw netlib::dimension_error(_input.size(), m_layout.front());
+    if (_sample.size() != m_layout.front())
+        throw netlib::dimension_error(_sample.size(), m_layout.front());
 
     // get Eigen vector for input, this does not copy the data
-    Eigen::Map<const Eigen::VectorXf> input(_input.data(), _input.size());
+    Eigen::Map<const Eigen::VectorXf> input(_sample.data(), _sample.size());
 
     // run first layer
     // note: last column is bias
@@ -106,84 +144,12 @@ std::vector<float> netlib::net::run(const std::vector<float>& _input)
     return std::vector<float>(a.data(), a.data() + a.size());
 }
 
-void netlib::net::train(const std::vector<float>& _input,
-                        const std::vector<uint8_t>& _label)
-{
-    // check for wrong dimensions
-    if (_input.size() != m_layout.front())
-        throw netlib::dimension_error(_input.size(), m_layout.front());
-
-    if (_label.size() != m_layout.back())
-        throw netlib::dimension_error(_label.size(), m_layout.back());
-
-    // get Eigen vector for input, this does not copy the data
-    Eigen::Map<const Eigen::VectorXf> input(_input.data(), _input.size());
-
-    // store activation values
-    std::vector<Eigen::VectorXf> z(m_weights.size());
-    std::vector<Eigen::VectorXf> a(m_weights.size());
-
-    // run first layer
-    // note: last column is bias
-    z[0] = m_weights[0].leftCols(m_weights[0].cols() - 1) * input +
-           m_weights[0].col(m_weights[0].cols() - 1);
-
-    a[0] = z[0].unaryExpr([](float x)
-                          { return 0.5f + 0.5f * x / (1.0f + fabsf(x)); });
-
-    // run remaining layers
-    for (int i = 1; i < m_weights.size(); i++)
-    {
-        z[i] = m_weights[i].leftCols(m_weights[i].cols() - 1) * a[i - 1] +
-               m_weights[i].col(m_weights[i].cols() - 1);
-
-        a[i] = z[i].unaryExpr([](float x)
-                              { return 0.5f + 0.5f * x / (1.0f + fabsf(x)); });
-    }
-
-    // get storage for delta of each layer
-    std::vector<Eigen::VectorXf> delta;
-
-    for (int i = 1; i < m_layout.size(); i++)
-        delta.push_back(Eigen::VectorXf(m_layout[i]));
-
-    // get delta of last layer. get loss by comparing activation with
-    // threshold and label, then take hadamard product with first derivative
-    // of ReLU of weighted input
-    for (int i = 0; i < m_layout.back(); i++)
-        delta.back()[i] =
-            (a.back()[i] - _label[i]) / (1.0f + powf(fabsf(z.back()[i]), 2));
-
-    // get delta of other layers. backpropagate delta of following layer, then
-    // take hadamard product with first derivative of ReLU of weighted input
-    for (int i = m_weights.size() - 1; i >= 1; i--)
-        delta[i - 1] =
-            (m_weights[i].leftCols(m_weights[i].cols() - 1).transpose() *
-             delta[i])
-                .cwiseProduct(z[i - 1].unaryExpr(
-                    [](float x) { return 1.0f / (1.0f + powf(fabsf(x), 2)); }));
-
-    // apply delta to weights and biases
-    // weights
-    m_weights[0].leftCols(m_weights[0].cols() - 1) -=
-        m_eta * delta[0] * input.transpose();
-
-    // biases
-    m_weights[0].col(m_weights[0].cols() - 1) -= m_eta_bias * delta[0];
-
-    for (int i = 1; i < m_weights.size(); i++)
-    {
-        // weights
-        m_weights[i].leftCols(m_weights[i].cols() - 1) -=
-            m_eta * delta[i] * a[i - 1].transpose();
-
-        // biases
-        m_weights[i].col(m_weights[i].cols() - 1) -= m_eta_bias * delta[i];
-    }
-}
-
+//------------------------------------------------------------------------------
+// test accuracy
+//------------------------------------------------------------------------------
 float netlib::net::test(const std::vector<std::vector<float>>& _samples,
-                        const std::vector<uint8_t>& _labels)
+                        const std::vector<std::vector<uint8_t>>& _labels,
+                        float _threshold)
 {
     if (_samples.size() != _labels.size())
         throw netlib::set_size_error(_samples.size(), _labels.size());
@@ -194,19 +160,23 @@ float netlib::net::test(const std::vector<std::vector<float>>& _samples,
     {
         std::vector<float> output = run(_samples[i]);
 
-        uint8_t result =
-            std::max_element(output.begin(), output.end()) - output.begin();
+        if (isnan(_threshold))
+        {
+            uint8_t result =
+                std::max_element(output.begin(), output.end()) - output.begin();
 
-        if (result == _labels[i])
-            success++;
+            uint8_t label =
+                std::max_element(_labels[i].begin(), _labels[i].end()) -
+                _labels[i].begin();
+
+            if (result == label)
+                success++;
+        }
+        else
+        {
+            throw netlib::exception("multiple output test not implemented yet");
+        }
     }
 
     return (float)success / (float)_samples.size();
-}
-
-float test(const std::vector<std::vector<float>>& _samples,
-           const std::vector<std::vector<uint8_t>>& _labels)
-{
-    throw netlib::exception(
-        "multiple output test mode is not implemented yet.");
 }

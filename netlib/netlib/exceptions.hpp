@@ -27,21 +27,21 @@ namespace netlib
         }
     };
 
-    // input dimensions do not fit net dimensions
+    // vector dimensions do not fit net dimensions
     class dimension_error : public netlib::exception
     {
     public:
-        dimension_error(size_t _input_size, size_t _input_layer_size)
+        dimension_error(size_t _vector_size, size_t _layer_size)
             : exception()
         {
-            m_message = "Dimension Error: input vector size (" +
-                        std::to_string(_input_size) +
-                        ") does not match input layer size (" +
-                        std::to_string(_input_layer_size) + ").";
+            m_message = "Dimension Error: vector size (" +
+                        std::to_string(_vector_size) +
+                        ") does not match layer size (" +
+                        std::to_string(_layer_size) + ").";
         }
     };
 
-    // comparing sets with different sizes
+    // comparing sets of different sizes
     class set_size_error : public netlib::exception
     {
     public:
@@ -50,6 +50,19 @@ namespace netlib
             m_message = "Set Size Error: comparing set of size " +
                         std::to_string(_size1) + " to set of size " +
                         std::to_string(_size2) + ".";
+        }
+    };
+
+    // nets with less than three layers are not supported
+    class not_enough_layers : public netlib::exception
+    {
+    public:
+        not_enough_layers(size_t _n_layers) : exception()
+        {
+            m_message =
+                "Not Enough Layers: nets with less than three layers are "
+                "not supported (tried " +
+                std::to_string(_n_layers) + " layers).";
         }
     };
 }

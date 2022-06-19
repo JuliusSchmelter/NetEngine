@@ -84,6 +84,18 @@ namespace netlib
                         std::to_string(_n_samples) + ").";
         }
     };
+
+    class invalid_start_pos : public netlib::exception
+    {
+    public:
+        invalid_start_pos(size_t _start_pos) : exception()
+        {
+            m_message = "Range Error: start position (" +
+                        std::to_string(_start_pos) +
+                        ") is not at least one batch size smaller than number "
+                        "of samples.";
+        }
+    };
 }
 
 #endif

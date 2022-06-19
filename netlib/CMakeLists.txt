@@ -4,6 +4,7 @@ include_directories(extern)
 add_library(netlib 
 src/net.cpp
 src/train.cpp
+src/test.cpp
 )
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)

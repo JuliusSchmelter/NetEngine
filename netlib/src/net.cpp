@@ -9,7 +9,7 @@
 //------------------------------------------------------------------------------
 // constructor
 //------------------------------------------------------------------------------
-netlib::net::net(const std::vector<unsigned>& _layout, float _eta, float _eta_bias)
+netlib::net::net(const std::vector<size_t>& _layout, float _eta, float _eta_bias)
     : m_layout(_layout), m_eta(_eta), m_eta_bias(_eta_bias)
 {
     // check min number of layers
@@ -17,11 +17,11 @@ netlib::net::net(const std::vector<unsigned>& _layout, float _eta, float _eta_bi
         throw netlib::not_enough_layers(_layout.size());
         
     // initialize weight matrices, add column for bias
-    for (int i = 0; i < _layout.size() - 1; i++)
+    for (size_t i = 0; i < _layout.size() - 1; i++)
         m_weights.push_back(Eigen::MatrixXf(_layout[i + 1], _layout[i] + 1));
 }
 
-netlib::net::net(const std::vector<unsigned>& _layout, float _eta)
+netlib::net::net(const std::vector<size_t>& _layout, float _eta)
     : net(_layout, _eta, 0.2 * _eta)
 {
 }
@@ -99,7 +99,7 @@ size_t netlib::net::n_parameters()
 void netlib::net::set_random()
 {
     // seed random number generator to get new random numbers each time
-    std::srand((unsigned int)std::time(0));
+    std::srand((unsigned)std::time(0));
 
     for (auto& i : m_weights)
     {
@@ -132,7 +132,7 @@ std::vector<float> netlib::net::run(const std::vector<float>& _sample)
                        { return 0.5f + 0.5f * x / (1.0f + fabsf(x)); });
 
     // run remaining layers
-    for (int i = 1; i < m_weights.size(); i++)
+    for (size_t i = 1; i < m_weights.size(); i++)
     {
         // note: eval() forces evaluation before new values are assigned to a
         a = ((m_weights[i].leftCols(m_weights[i].cols() - 1) * a).eval() +
@@ -142,41 +142,4 @@ std::vector<float> netlib::net::run(const std::vector<float>& _sample)
     }
 
     return std::vector<float>(a.data(), a.data() + a.size());
-}
-
-//------------------------------------------------------------------------------
-// test accuracy
-//------------------------------------------------------------------------------
-float netlib::net::test(const std::vector<std::vector<float>>& _samples,
-                        const std::vector<std::vector<uint8_t>>& _labels,
-                        float _threshold)
-{
-    if (_samples.size() != _labels.size())
-        throw netlib::set_size_error(_samples.size(), _labels.size());
-
-    unsigned success = 0;
-
-    for (int i = 0; i < _samples.size(); i++)
-    {
-        std::vector<float> output = run(_samples[i]);
-
-        if (isnan(_threshold))
-        {
-            uint8_t result =
-                std::max_element(output.begin(), output.end()) - output.begin();
-
-            uint8_t label =
-                std::max_element(_labels[i].begin(), _labels[i].end()) -
-                _labels[i].begin();
-
-            if (result == label)
-                success++;
-        }
-        else
-        {
-            throw netlib::exception("multiple output test not implemented yet");
-        }
-    }
-
-    return (float)success / (float)_samples.size();
 }

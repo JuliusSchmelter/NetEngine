@@ -134,9 +134,13 @@ void netlib::net::train(const std::vector<float>& _sample,
 void netlib::net::train(const std::vector<std::vector<float>>& _samples,
                         const std::vector<std::vector<uint8_t>>& _labels,
                         size_t _n_batches, size_t _batch_size,
-                        size_t _n_threads, size_t _start_pos)
+                        size_t _start_pos, size_t _n_threads)
 {
-    std::cout << "training...\n";
+    // std::thread::hardware_concurrency() can return 0
+    if (_n_threads == 0)
+        _n_threads = 4;
+
+    std::cout << "training with " << _n_threads << " threads ...\n";
 
     // check for bad inputs
     if (_samples[0].size() != m_layout.front())
@@ -155,7 +159,7 @@ void netlib::net::train(const std::vector<std::vector<float>>& _samples,
         throw netlib::batches_too_large(_batch_size, _samples.size());
 
     if (_start_pos + _batch_size > _samples.size())
-        throw netlib::invalid_start_pos(_start_pos);
+        _start_pos = 0;
 
     // position in _samples and _labels
     size_t pos = _start_pos;
@@ -228,7 +232,7 @@ void netlib::net::train(const std::vector<std::vector<float>>& _samples,
         // join threads and apply weight modifications
         // note: iterate backwards because later threads potentially have fever
         // samples
-        for (size_t j = _n_threads - 1; j >= 0; j--)
+        for (int j = _n_threads - 1; j >= 0; j--)
         {
             threads[j].join();
             for (size_t k = 0; k < m_weights.size(); k++)

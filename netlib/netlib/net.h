@@ -2,6 +2,7 @@
 #define NETLIB_NET_H
 
 #include "Eigen/Dense"
+#include <thread>
 #include <vector>
 
 namespace netlib
@@ -21,13 +22,13 @@ namespace netlib
             std::vector<Eigen::MatrixXf>& _weight_mods);
         void test_thread(const std::vector<std::vector<float>>& _samples,
                          const std::vector<std::vector<uint8_t>>& _labels,
-                         float& _ouput, size_t _start_pos, size_t _batch_size,
-                         float _subset = 100.0f, float _threshold = NAN);
+                         float& _output, size_t _start_pos, size_t _batch_size,
+                         float _subset, float _threshold);
 
     public:
-        net(const std::vector<unsigned>& _layout, float _eta, float _eta_bias);
+        net(const std::vector<size_t>& _layout, float _eta, float _eta_bias);
         // default _eta_bias to 0.2 * _eta
-        net(const std::vector<unsigned>& _layout, float _eta);
+        net(const std::vector<size_t>& _layout, float _eta);
         ~net() = default;
 
         float get_eta();
@@ -45,17 +46,13 @@ namespace netlib
         // training with mini batching and multithreading
         void train(const std::vector<std::vector<float>>& _samples,
                    const std::vector<std::vector<uint8_t>>& _labels,
-                   size_t _n_batches, size_t _batch_size, size_t _n_threads,
-                   size_t _start_pos = 0);
+                   size_t _n_batches, size_t _batch_size,
+                   size_t _start_pos = 0, size_t _n_threads = std::thread::hardware_concurrency());
         // test accuracy
         float test(const std::vector<std::vector<float>>& _samples,
                    const std::vector<std::vector<uint8_t>>& _labels,
-                   float _threshold = NAN);
-        // test accuracy faster
-        float test(const std::vector<std::vector<float>>& _samples,
-                   const std::vector<std::vector<uint8_t>>& _labels,
-                   size_t _n_threads, float _subset = 100.0f,
-                   float _threshold = NAN);
+                   float _subset = 100.0f, float _threshold = NAN,
+                   size_t _n_threads = std::thread::hardware_concurrency());
     };
 }
 

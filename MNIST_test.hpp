@@ -14,10 +14,10 @@ void MNIST_test()
     std::cout << "MNIST_test\n";
     netlib::timer t_master("master");
 
-//------------------------------------------------------------------------------
+    //------------------------------------------------------------------------------
 
     // init net
-    netlib::net net({28 * 28, 200, 200, 10}, 0.01);
+    netlib::net net({28 * 28, 300, 300, 50, 10}, 0.005);
     net.set_random();
     std::cout << "n_parameters: " << net.n_parameters() << '\n';
 
@@ -29,7 +29,7 @@ void MNIST_test()
         {0, 0, 0, 0, 0, 0, 1, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
         {0, 0, 0, 0, 0, 0, 0, 0, 1, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 1}};
 
-//------------------------------------------------------------------------------
+    //------------------------------------------------------------------------------
 
     // get storage
     std::vector<std::vector<uint8_t>> test_labels(N_TEST);
@@ -98,14 +98,29 @@ void MNIST_test()
         }
         examples.close();
     }
-    
-//------------------------------------------------------------------------------
-// train and test
 
-    for (size_t i = 0; i < 10; i++)
+    //--------------------------------------------------------------------------
+    // train and test
+
+    int mini_batches = 20;
+    int m_b_size = 480;
+
+    for (size_t trained = 0;; trained += mini_batches * m_b_size)
     {
-        netlib::timer t("batch");
-        net.train(train, train_labels, 100, 60, 12, i * 6000);
-        std::cout << "accuracy: " << 100 * net.test(test, test_labels) << "%\n";
+        std::cout << "trained: " << trained << '\n';
+        
+        {
+        netlib::timer t("train");
+
+        net.train(train, train_labels, mini_batches, m_b_size,
+                  trained % N_TRAIN, 3);
+        }
+
+        {
+            netlib::timer t("test");
+            
+            std::cout << "accuracy: " << 100 * net.test(test, test_labels)
+                      << "%\n";
+        }
     }
 }

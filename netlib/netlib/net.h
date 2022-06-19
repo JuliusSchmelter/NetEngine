@@ -9,7 +9,7 @@ namespace netlib
     class net
     {
     private:
-        const std::vector<unsigned> m_layout;
+        const std::vector<size_t> m_layout;
         std::vector<Eigen::MatrixXf> m_weights;
         float m_eta;
         float m_eta_bias;
@@ -19,6 +19,10 @@ namespace netlib
             const std::vector<Eigen::Map<const Eigen::VectorX<uint8_t>>>&
                 _labels,
             std::vector<Eigen::MatrixXf>& _weight_mods);
+        void test_thread(const std::vector<std::vector<float>>& _samples,
+                         const std::vector<std::vector<uint8_t>>& _labels,
+                         float& _ouput, size_t _start_pos, size_t _batch_size,
+                         float _subset = 100.0f, float _threshold = NAN);
 
     public:
         net(const std::vector<unsigned>& _layout, float _eta, float _eta_bias);
@@ -41,10 +45,16 @@ namespace netlib
         // training with mini batching and multithreading
         void train(const std::vector<std::vector<float>>& _samples,
                    const std::vector<std::vector<uint8_t>>& _labels,
-                   size_t _batch_size, size_t _n_threads);
+                   size_t _n_batches, size_t _batch_size, size_t _n_threads,
+                   size_t _start_pos = 0);
         // test accuracy
         float test(const std::vector<std::vector<float>>& _samples,
                    const std::vector<std::vector<uint8_t>>& _labels,
+                   float _threshold = NAN);
+        // test accuracy faster
+        float test(const std::vector<std::vector<float>>& _samples,
+                   const std::vector<std::vector<uint8_t>>& _labels,
+                   size_t _n_threads, float _subset = 100.0f,
                    float _threshold = NAN);
     };
 }

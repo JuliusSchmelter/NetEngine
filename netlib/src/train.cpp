@@ -230,7 +230,7 @@ void netlib::net::train(const std::vector<std::vector<float>>& _samples,
                             std::ref(labels[j]), std::ref(weight_mods[j])));
 
         // join threads and apply weight modifications
-        // note: iterate backwards because later threads potentially have fever
+        // note: iterate backwards because later threads potentially have fewer
         // samples
         for (int j = _n_threads - 1; j >= 0; j--)
         {

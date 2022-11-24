@@ -53,6 +53,6 @@ namespace NetEngine {
                    float subset = 100.0f, float threshold = NAN,
                    size_t n_threads = std::thread::hardware_concurrency());
     };
-} // namespace NetEngine
+}
 
 #endif

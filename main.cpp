@@ -1,12 +1,8 @@
-#include <iostream>
-#include <vector>
+#include "NetEngine/DevTools.h"
+#include "NetEngine/Net.h"
 
-#include "netlib/net.h"
-#include "netlib/timer.hpp"
+#include "MNIST_test.h"
 
-#include "MNIST_test.hpp"
-
-int main(void)
-{
+int main(void) {
     MNIST_test();
 }

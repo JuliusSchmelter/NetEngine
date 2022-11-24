@@ -1,5 +1,5 @@
-#include "netlib/net.h"
-#include "netlib/exceptions.hpp"
+#include "NetEngine/Net.h"
+#include "NetEngine/Exceptions.h"
 
 #include <cassert>
 #include <iomanip>
@@ -8,51 +8,42 @@
 //------------------------------------------------------------------------------
 // constructor
 //------------------------------------------------------------------------------
-netlib::net::net(const std::vector<size_t>& _layout, float _eta, float _eta_bias)
-    : m_layout(_layout), m_eta(_eta), m_eta_bias(_eta_bias)
-{
+NetEngine::Net::Net(const std::vector<size_t> &layout, float eta,
+                    float eta_bias)
+    : m_layout(layout), m_eta(eta), m_eta_bias(eta_bias) {
     // check min number of layers
-    if(_layout.size() < 3)
-        throw netlib::not_enough_layers(_layout.size());
-        
+    if (layout.size() < 3)
+        throw NetEngine::NotEnoughLayers(layout.size());
+
     // initialize weight matrices, add column for bias
-    for (size_t i = 0; i < _layout.size() - 1; i++)
-        m_weights.push_back(Eigen::MatrixXf(_layout[i + 1], _layout[i] + 1));
+    for (size_t i = 0; i < layout.size() - 1; i++)
+        m_weights.push_back(Eigen::MatrixXf(layout[i + 1], layout[i] + 1));
 }
 
-netlib::net::net(const std::vector<size_t>& _layout, float _eta)
-    : net(_layout, _eta, 0.2 * _eta)
-{
+NetEngine::Net::Net(const std::vector<size_t> &layout, float eta)
+    : Net(layout, eta, 0.2 * eta) {
 }
 
 //------------------------------------------------------------------------------
 // get, set
 //------------------------------------------------------------------------------
-float netlib::net::get_eta()
-{
+float NetEngine::Net::get_eta() {
     return m_eta;
 }
-
-void netlib::net::set_eta(float _eta)
-{
-    m_eta = _eta;
+void NetEngine::Net::set_eta(float eta) {
+    m_eta = eta;
 }
-
-float netlib::net::get_eta_bias()
-{
+float NetEngine::Net::get_eta_bias() {
     return m_eta_bias;
 }
-
-void netlib::net::set_eta_bias(float _eta_bias)
-{
-    m_eta_bias = _eta_bias;
+void NetEngine::Net::set_eta_bias(float eta_bias) {
+    m_eta_bias = eta_bias;
 }
 
 //------------------------------------------------------------------------------
 // print net
 //------------------------------------------------------------------------------
-void netlib::net::print()
-{
+void NetEngine::Net::print() {
     // save stream format
     std::ios streamfmt(nullptr);
     streamfmt.copyfmt(std::cout);
@@ -60,7 +51,7 @@ void netlib::net::print()
     // print layout
     std::cout << "##############################################\nlayout: |";
 
-    for (auto& i : m_layout)
+    for (auto &i : m_layout)
         std::cout << i << "|";
 
     // print eta and threshold
@@ -70,7 +61,7 @@ void netlib::net::print()
     // print weights
     std::cout << " \nweights : ";
 
-    for (auto& i : m_weights)
+    for (auto &i : m_weights)
         std::cout << "\n----------------------------------------------\n"
                   << std::fixed << std::setprecision(3) << i;
 
@@ -83,10 +74,9 @@ void netlib::net::print()
 //------------------------------------------------------------------------------
 // get number of parameters
 //------------------------------------------------------------------------------
-size_t netlib::net::n_parameters()
-{
+size_t NetEngine::Net::n_parameters() {
     size_t n = 0;
-    for (const auto& i : m_weights)
+    for (const auto &i : m_weights)
         n += i.rows() * i.cols();
 
     return n;
@@ -95,13 +85,11 @@ size_t netlib::net::n_parameters()
 //------------------------------------------------------------------------------
 // set weights to random values
 //------------------------------------------------------------------------------
-void netlib::net::set_random()
-{
+void NetEngine::Net::set_random() {
     // seed random number generator to get new random numbers each time
     std::srand((unsigned)std::time(0));
 
-    for (auto& i : m_weights)
-    {
+    for (auto &i : m_weights) {
         // set weight matrix to random values in range [-1, 1]
         i.setRandom();
 
@@ -113,31 +101,30 @@ void netlib::net::set_random()
 //------------------------------------------------------------------------------
 // run example
 //------------------------------------------------------------------------------
-std::vector<float> netlib::net::run(const std::vector<float>& _sample)
-{
+std::vector<float> NetEngine::Net::run(const std::vector<float> &sample) {
     // check dimensions
-    if (_sample.size() != m_layout.front())
-        throw netlib::dimension_error(_sample.size(), m_layout.front());
+    if (sample.size() != m_layout.front())
+        throw NetEngine::DimensionError(sample.size(), m_layout.front());
 
     // get Eigen vector for input, this does not copy the data
-    Eigen::Map<const Eigen::VectorXf> input(_sample.data(), _sample.size());
+    Eigen::Map<const Eigen::VectorXf> input(sample.data(), sample.size());
 
     // run first layer
     // note: last column is bias
     Eigen::VectorXf a =
         (m_weights[0].leftCols(m_weights[0].cols() - 1) * input +
          m_weights[0].col(m_weights[0].cols() - 1))
-            .unaryExpr([](float x)
-                       { return 0.5f + 0.5f * x / (1.0f + fabsf(x)); });
+            .unaryExpr(
+                [](float x) { return 0.5f + 0.5f * x / (1.0f + fabsf(x)); });
 
     // run remaining layers
-    for (size_t i = 1; i < m_weights.size(); i++)
-    {
+    for (size_t i = 1; i < m_weights.size(); i++) {
         // note: eval() forces evaluation before new values are assigned to a
         a = ((m_weights[i].leftCols(m_weights[i].cols() - 1) * a).eval() +
              m_weights[i].col(m_weights[i].cols() - 1))
-                .unaryExpr([](float x)
-                           { return 0.5f + 0.5f * x / (1.0f + fabsf(x)); });
+                .unaryExpr([](float x) {
+                    return 0.5f + 0.5f * x / (1.0f + fabsf(x));
+                });
     }
 
     return std::vector<float>(a.data(), a.data() + a.size());

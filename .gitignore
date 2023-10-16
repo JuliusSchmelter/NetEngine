@@ -1,0 +1,5 @@
+.vscode/
+build/
+research/
+*.code-workspace
+.env

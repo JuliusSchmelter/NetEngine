@@ -1,9 +1,0 @@
-Language:        Cpp
-BasedOnStyle:  LLVM
-IndentWidth: 4
-IndentAccessModifiers: false
-AccessModifierOffset: -4
-AllowShortFunctionsOnASingleLine: false
-NamespaceIndentation: All
-FixNamespaceComments: false
-ColumnLimit: 100

@@ -1,5 +1,5 @@
-#include "NetEngine/Exceptions.h"
-#include "NetEngine/Net.h"
+#include "Exceptions.h"
+#include "Net.h"
 
 #include <iostream>
 #include <math.h>
@@ -8,10 +8,10 @@
 //------------------------------------------------------------------------------
 // test accuracy thread
 //------------------------------------------------------------------------------
-void NetEngine::Net::test_thread(
-    const std::vector<std::vector<float>> &samples,
-    const std::vector<std::vector<uint8_t>> &labels, float &output,
-    size_t start_pos, size_t batch_size, float subset, float threshold) {
+void NetEngine::Net::test_thread(const std::vector<std::vector<float>> &samples,
+                                 const std::vector<std::vector<uint8_t>> &labels, float &output,
+                                 size_t start_pos, size_t batch_size, float subset,
+                                 float threshold) {
     // check for bad inputs
     if (samples.size() != labels.size())
         throw NetEngine::SetSizeError(samples.size(), labels.size());
@@ -27,13 +27,10 @@ void NetEngine::Net::test_thread(
             for (size_t i = start_pos; i < start_pos + batch_size; i++) {
                 std::vector<float> output = run(samples[i]);
 
-                uint8_t result =
-                    std::max_element(output.begin(), output.end()) -
-                    output.begin();
+                uint8_t result = std::max_element(output.begin(), output.end()) - output.begin();
 
                 uint8_t label =
-                    std::max_element(labels[i].begin(), labels[i].end()) -
-                    labels[i].begin();
+                    std::max_element(labels[i].begin(), labels[i].end()) - labels[i].begin();
 
                 if (result == label)
                     success++;
@@ -50,13 +47,10 @@ void NetEngine::Net::test_thread(
 
                 std::vector<float> output = run(samples[j]);
 
-                uint8_t result =
-                    std::max_element(output.begin(), output.end()) -
-                    output.begin();
+                uint8_t result = std::max_element(output.begin(), output.end()) - output.begin();
 
                 uint8_t label =
-                    std::max_element(labels[j].begin(), labels[j].end()) -
-                    labels[j].begin();
+                    std::max_element(labels[j].begin(), labels[j].end()) - labels[j].begin();
 
                 if (result == label)
                     success++;
@@ -72,8 +66,8 @@ void NetEngine::Net::test_thread(
 // test accuracy
 //------------------------------------------------------------------------------
 float NetEngine::Net::test(const std::vector<std::vector<float>> &samples,
-                           const std::vector<std::vector<uint8_t>> &labels,
-                           float subset, float threshold, size_t n_threads) {
+                           const std::vector<std::vector<uint8_t>> &labels, float subset,
+                           float threshold, size_t n_threads) {
     // std::thread::hardware_concurrency() can return 0
     if (n_threads == 0)
         n_threads = 4;
@@ -108,9 +102,8 @@ float NetEngine::Net::test(const std::vector<std::vector<float>> &samples,
             n[i] = samples_per_thread;
 
         // dispatch thread
-        threads.push_back(std::thread(
-            &Net::test_thread, this, std::ref(samples), std ::ref(labels),
-            std::ref(outputs[i]), pos, n[i], subset, threshold));
+        threads.push_back(std::thread(&Net::test_thread, this, std::ref(samples), std ::ref(labels),
+                                      std::ref(outputs[i]), pos, n[i], subset, threshold));
 
         pos += n[i];
     }

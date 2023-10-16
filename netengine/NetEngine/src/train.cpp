@@ -1,5 +1,5 @@
-#include "NetEngine/Exceptions.h"
-#include "NetEngine/Net.h"
+#include "Exceptions.h"
+#include "Net.h"
 
 #include <cassert>
 #include <iostream>
@@ -21,8 +21,7 @@ void NetEngine::Net::get_weight_mods(
     // init weight mods
     weight_mods.reserve(m_weights.size());
     for (size_t i = 0; i < m_weights.size(); i++)
-        weight_mods.push_back(
-            Eigen::MatrixXf::Zero(m_weights[i].rows(), m_weights[i].cols()));
+        weight_mods.push_back(Eigen::MatrixXf::Zero(m_weights[i].rows(), m_weights[i].cols()));
 
     // temporary storage for activation values and deltas
     std::vector<Eigen::VectorXf> z(m_weights.size());
@@ -39,35 +38,29 @@ void NetEngine::Net::get_weight_mods(
         z[0] = m_weights[0].leftCols(m_weights[0].cols() - 1) * samples[i] +
                m_weights[0].col(m_weights[0].cols() - 1);
 
-        a[0] = z[0].unaryExpr(
-            [](float x) { return 0.5f + 0.5f * x / (1.0f + fabsf(x)); });
+        a[0] = z[0].unaryExpr([](float x) { return 0.5f + 0.5f * x / (1.0f + fabsf(x)); });
 
         // run remaining layers
         for (size_t j = 1; j < m_weights.size(); j++) {
             z[j] = m_weights[j].leftCols(m_weights[j].cols() - 1) * a[j - 1] +
                    m_weights[j].col(m_weights[j].cols() - 1);
 
-            a[j] = z[j].unaryExpr(
-                [](float x) { return 0.5f + 0.5f * x / (1.0f + fabsf(x)); });
+            a[j] = z[j].unaryExpr([](float x) { return 0.5f + 0.5f * x / (1.0f + fabsf(x)); });
         }
 
         // get delta of last layer. get loss by comparing activation with
         // label, then take hadamard product with first derivative of
         // sigmoid of weighted input.
         for (size_t j = 0; j < m_layout.back(); j++)
-            deltas.back()[j] = (a.back()[j] - labels[i][j]) /
-                               (1.0f + powf(fabsf(z.back()[j]), 2));
+            deltas.back()[j] = (a.back()[j] - labels[i][j]) / (1.0f + powf(fabsf(z.back()[j]), 2));
 
         // get delta of remaining layers. backpropagate delta of following
         // layer, then take hadamard product with first derivative of
         // sigmoid of weighted input
         for (size_t j = m_weights.size() - 1; j >= 1; j--)
-            deltas[j - 1] =
-                (m_weights[j].leftCols(m_weights[j].cols() - 1).transpose() *
-                 deltas[j])
-                    .cwiseProduct(z[j - 1].unaryExpr([](float x) {
-                        return 1.0f / (1.0f + powf(fabsf(x), 2));
-                    }));
+            deltas[j - 1] = (m_weights[j].leftCols(m_weights[j].cols() - 1).transpose() * deltas[j])
+                                .cwiseProduct(z[j - 1].unaryExpr(
+                                    [](float x) { return 1.0f / (1.0f + powf(fabsf(x), 2)); }));
 
         // ouput weight modification
         // weights
@@ -83,8 +76,7 @@ void NetEngine::Net::get_weight_mods(
                 m_eta * deltas[j] * a[j - 1].transpose();
 
             // biases
-            weight_mods[j].col(weight_mods[j].cols() - 1) -=
-                m_eta_bias * deltas[j];
+            weight_mods[j].col(weight_mods[j].cols() - 1) -= m_eta_bias * deltas[j];
         }
     }
 }
@@ -92,8 +84,7 @@ void NetEngine::Net::get_weight_mods(
 //------------------------------------------------------------------------------
 // basic training, no mini batching or multithreading
 //------------------------------------------------------------------------------
-void NetEngine::Net::train(const std::vector<float> &sample,
-                           const std::vector<uint8_t> &label) {
+void NetEngine::Net::train(const std::vector<float> &sample, const std::vector<uint8_t> &label) {
     // check for wrong dimensions
     if (sample.size() != m_layout.front())
         throw NetEngine::DimensionError(sample.size(), m_layout.front());
@@ -103,13 +94,11 @@ void NetEngine::Net::train(const std::vector<float> &sample,
 
     // get vector of Eigen vector for sample, this does not copy the data
     std::vector<Eigen::Map<const Eigen::VectorXf>> sample_eigen;
-    sample_eigen.push_back(
-        Eigen::Map<const Eigen::VectorXf>(sample.data(), sample.size()));
+    sample_eigen.push_back(Eigen::Map<const Eigen::VectorXf>(sample.data(), sample.size()));
 
     // get vector of Eigen vector for label, this does not copy the data
     std::vector<Eigen::Map<const Eigen::VectorX<uint8_t>>> label_eigen;
-    label_eigen.push_back(
-        Eigen::Map<const Eigen::VectorX<uint8_t>>(label.data(), label.size()));
+    label_eigen.push_back(Eigen::Map<const Eigen::VectorX<uint8_t>>(label.data(), label.size()));
 
     // get vector for weight mods
     std::vector<Eigen::MatrixXf> weight_mods;
@@ -126,9 +115,8 @@ void NetEngine::Net::train(const std::vector<float> &sample,
 // training with mini batching and multithreading
 //------------------------------------------------------------------------------
 void NetEngine::Net::train(const std::vector<std::vector<float>> &samples,
-                           const std::vector<std::vector<uint8_t>> &labels,
-                           size_t n_batches, size_t batch_size,
-                           size_t start_pos, size_t n_threads) {
+                           const std::vector<std::vector<uint8_t>> &labels, size_t n_batches,
+                           size_t batch_size, size_t start_pos, size_t n_threads) {
     // std::thread::hardware_concurrency() can return 0
     if (n_threads == 0)
         n_threads = 4;
@@ -172,10 +160,8 @@ void NetEngine::Net::train(const std::vector<std::vector<float>> &samples,
 
         // allocate storage for threads
         std::vector<std::vector<Eigen::MatrixXf>> weight_mods(n_threads);
-        std::vector<std::vector<Eigen::Map<const Eigen::VectorXf>>>
-            samples_eigen(n_threads);
-        std::vector<std::vector<Eigen::Map<const Eigen::VectorX<uint8_t>>>>
-            labels_eigen(n_threads);
+        std::vector<std::vector<Eigen::Map<const Eigen::VectorXf>>> samples_eigen(n_threads);
+        std::vector<std::vector<Eigen::Map<const Eigen::VectorX<uint8_t>>>> labels_eigen(n_threads);
 
         // split samples on threads
         size_t samples_per_thread = current_batch_size / n_threads;
@@ -199,9 +185,8 @@ void NetEngine::Net::train(const std::vector<std::vector<float>> &samples,
                 samples_eigen[j].push_back(Eigen::Map<const Eigen::VectorXf>(
                     samples[pos + k].data(), samples[pos + k].size()));
 
-                labels_eigen[j].push_back(
-                    Eigen::Map<const Eigen::VectorX<uint8_t>>(
-                        labels[pos + k].data(), labels[pos + k].size()));
+                labels_eigen[j].push_back(Eigen::Map<const Eigen::VectorX<uint8_t>>(
+                    labels[pos + k].data(), labels[pos + k].size()));
             }
 
             // increment position in samples and labels
@@ -214,9 +199,8 @@ void NetEngine::Net::train(const std::vector<std::vector<float>> &samples,
 
         // dispatch threads
         for (size_t j = 0; j < n_threads; j++)
-            threads.push_back(std::thread(
-                &Net::get_weight_mods, this, std::ref(samples_eigen[j]),
-                std::ref(labels_eigen[j]), std::ref(weight_mods[j])));
+            threads.push_back(std::thread(&Net::get_weight_mods, this, std::ref(samples_eigen[j]),
+                                          std::ref(labels_eigen[j]), std::ref(weight_mods[j])));
 
         // join threads and apply weight modifications
         // note: iterate backwards because later threads potentially have fewer

@@ -1,5 +1,5 @@
-#include "NetEngine/Net.h"
-#include "NetEngine/Exceptions.h"
+#include "Net.h"
+#include "Exceptions.h"
 
 #include <cassert>
 #include <iomanip>
@@ -8,8 +8,7 @@
 //------------------------------------------------------------------------------
 // constructor
 //------------------------------------------------------------------------------
-NetEngine::Net::Net(const std::vector<size_t> &layout, float eta,
-                    float eta_bias)
+NetEngine::Net::Net(const std::vector<size_t> &layout, float eta, float eta_bias)
     : m_layout(layout), m_eta(eta), m_eta_bias(eta_bias) {
     // check min number of layers
     if (layout.size() < 3)
@@ -20,8 +19,7 @@ NetEngine::Net::Net(const std::vector<size_t> &layout, float eta,
         m_weights.push_back(Eigen::MatrixXf(layout[i + 1], layout[i] + 1));
 }
 
-NetEngine::Net::Net(const std::vector<size_t> &layout, float eta)
-    : Net(layout, eta, 0.2 * eta) {
+NetEngine::Net::Net(const std::vector<size_t> &layout, float eta) : Net(layout, eta, 0.2 * eta) {
 }
 
 //------------------------------------------------------------------------------
@@ -111,20 +109,16 @@ std::vector<float> NetEngine::Net::run(const std::vector<float> &sample) {
 
     // run first layer
     // note: last column is bias
-    Eigen::VectorXf a =
-        (m_weights[0].leftCols(m_weights[0].cols() - 1) * input +
-         m_weights[0].col(m_weights[0].cols() - 1))
-            .unaryExpr(
-                [](float x) { return 0.5f + 0.5f * x / (1.0f + fabsf(x)); });
+    Eigen::VectorXf a = (m_weights[0].leftCols(m_weights[0].cols() - 1) * input +
+                         m_weights[0].col(m_weights[0].cols() - 1))
+                            .unaryExpr([](float x) { return 0.5f + 0.5f * x / (1.0f + fabsf(x)); });
 
     // run remaining layers
     for (size_t i = 1; i < m_weights.size(); i++) {
         // note: eval() forces evaluation before new values are assigned to a
         a = ((m_weights[i].leftCols(m_weights[i].cols() - 1) * a).eval() +
              m_weights[i].col(m_weights[i].cols() - 1))
-                .unaryExpr([](float x) {
-                    return 0.5f + 0.5f * x / (1.0f + fabsf(x));
-                });
+                .unaryExpr([](float x) { return 0.5f + 0.5f * x / (1.0f + fabsf(x)); });
     }
 
     return std::vector<float>(a.data(), a.data() + a.size());

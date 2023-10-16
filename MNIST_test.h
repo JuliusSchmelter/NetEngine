@@ -9,7 +9,7 @@
 #define N_TEST 10000
 #define N_TRAIN 60000
 
-#define LAYOUT                                                                 \
+#define LAYOUT                                                                                     \
     { 28 * 28, 100, 10 }
 #define ETA 0.1
 #define MINI_BATCHES 16
@@ -94,13 +94,12 @@ void MNIST_test() {
     for (size_t trained = 0;; trained += MINI_BATCHES * MINI_BATCH_SIZE) {
         LOG(trained)
         TIC(train);
-        net.train(train_images, train_labels, MINI_BATCHES, MINI_BATCH_SIZE,
-                  trained % N_TRAIN, N_THREADS);
+        net.train(train_images, train_labels, MINI_BATCHES, MINI_BATCH_SIZE, trained % N_TRAIN,
+                  N_THREADS);
         TOC(train)
 
         TIC(test)
-        std::cout << "accuracy: " << 100 * net.test(test_images, test_labels)
-                  << "%\n";
+        std::cout << "accuracy: " << 100 * net.test(test_images, test_labels) << "%\n";
         TOC(test)
     }
 }

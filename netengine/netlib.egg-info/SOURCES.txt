@@ -1,7 +1,0 @@
-pyproject.toml
-setup.cfg
-setup.py
-netlib.egg-info/PKG-INFO
-netlib.egg-info/SOURCES.txt
-netlib.egg-info/dependency_links.txt
-netlib.egg-info/top_level.txt

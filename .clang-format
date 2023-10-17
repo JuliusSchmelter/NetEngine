@@ -7,3 +7,4 @@ AllowShortFunctionsOnASingleLine: false
 NamespaceIndentation: All
 FixNamespaceComments: false
 ColumnLimit: 100
+PointerAlignment: Left

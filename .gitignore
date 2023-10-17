@@ -1,2 +1,4 @@
 *.code-workspace
 .env/
+**/*.egg-info/
+**/build/

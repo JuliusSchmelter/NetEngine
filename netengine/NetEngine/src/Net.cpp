@@ -8,7 +8,7 @@
 //------------------------------------------------------------------------------
 // constructor
 //------------------------------------------------------------------------------
-NetEngine::Net::Net(const std::vector<size_t> &layout, float eta, float eta_bias)
+NetEngine::Net::Net(const std::vector<size_t>& layout, float eta, float eta_bias)
     : m_layout(layout), m_eta(eta), m_eta_bias(eta_bias) {
     // check min number of layers
     if (layout.size() < 3)
@@ -17,9 +17,6 @@ NetEngine::Net::Net(const std::vector<size_t> &layout, float eta, float eta_bias
     // initialize weight matrices, add column for bias
     for (size_t i = 0; i < layout.size() - 1; i++)
         m_weights.push_back(Eigen::MatrixXf(layout[i + 1], layout[i] + 1));
-}
-
-NetEngine::Net::Net(const std::vector<size_t> &layout, float eta) : Net(layout, eta, 0.2 * eta) {
 }
 
 //------------------------------------------------------------------------------
@@ -49,7 +46,7 @@ void NetEngine::Net::print() {
     // print layout
     std::cout << "##############################################\nlayout: |";
 
-    for (auto &i : m_layout)
+    for (auto& i : m_layout)
         std::cout << i << "|";
 
     // print eta and threshold
@@ -59,7 +56,7 @@ void NetEngine::Net::print() {
     // print weights
     std::cout << " \nweights : ";
 
-    for (auto &i : m_weights)
+    for (auto& i : m_weights)
         std::cout << "\n----------------------------------------------\n"
                   << std::fixed << std::setprecision(3) << i;
 
@@ -74,7 +71,7 @@ void NetEngine::Net::print() {
 //------------------------------------------------------------------------------
 size_t NetEngine::Net::n_parameters() {
     size_t n = 0;
-    for (const auto &i : m_weights)
+    for (const auto& i : m_weights)
         n += i.rows() * i.cols();
 
     return n;
@@ -87,7 +84,7 @@ void NetEngine::Net::set_random() {
     // seed random number generator to get new random numbers each time
     std::srand((unsigned)std::time(0));
 
-    for (auto &i : m_weights) {
+    for (auto& i : m_weights) {
         // set weight matrix to random values in range [-1, 1]
         i.setRandom();
 
@@ -99,7 +96,7 @@ void NetEngine::Net::set_random() {
 //------------------------------------------------------------------------------
 // run example
 //------------------------------------------------------------------------------
-std::vector<float> NetEngine::Net::run(const std::vector<float> &sample) {
+std::vector<float> NetEngine::Net::run(const std::vector<float>& sample) {
     // check dimensions
     if (sample.size() != m_layout.front())
         throw NetEngine::DimensionError(sample.size(), m_layout.front());

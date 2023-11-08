@@ -17,6 +17,8 @@ NetEngine::Net::Net(const std::vector<size_t>& layout, float eta, float eta_bias
     // initialize weight matrices, add column for bias
     for (size_t i = 0; i < layout.size() - 1; i++)
         m_weights.push_back(Eigen::MatrixXf(layout[i + 1], layout[i] + 1));
+
+    set_random();
 }
 
 //------------------------------------------------------------------------------

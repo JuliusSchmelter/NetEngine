@@ -5,12 +5,12 @@ from linetimer import CodeTimer
 N_TEST = 10000
 N_TRAIN = 60000
 
-LAYOUT = [28 * 28, 500, 200, 100, 10]
+LAYOUT = [28 * 28, 500, 200, 60, 10]
 ETA = 0.1
 ETA_BIAS = 0.02
 
-MINI_BATCHES = 32
-MINI_BATCH_SIZE = 2048
+MINI_BATCHES = 64
+MINI_BATCH_SIZE = 1024
 
 
 # Define target vectors.
@@ -47,7 +47,7 @@ with CodeTimer("load training data"):
 
 # Get Net instance.
 net = netengine.Net(LAYOUT, ETA, ETA_BIAS)
-print(f"number of parameters: {net.n_parameters()}")
+print(net)
 
 # Train and test.
 trained = 0

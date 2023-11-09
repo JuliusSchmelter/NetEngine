@@ -5,11 +5,11 @@
 #include <math.h>
 #include <thread>
 
-//------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------
 // test accuracy thread
-//------------------------------------------------------------------------------
-void NetEngine::Net::test_thread(const std::vector<std::vector<float>> &samples,
-                                 const std::vector<std::vector<uint8_t>> &labels, float &output,
+//--------------------------------------------------------------------------------------------------
+void NetEngine::Net::test_thread(const std::vector<std::vector<float>>& samples,
+                                 const std::vector<std::vector<uint8_t>>& labels, float& output,
                                  size_t start_pos, size_t batch_size, float subset,
                                  float threshold) {
     // check for bad inputs
@@ -62,11 +62,11 @@ void NetEngine::Net::test_thread(const std::vector<std::vector<float>> &samples,
     }
 }
 
-//------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------
 // test accuracy
-//------------------------------------------------------------------------------
-float NetEngine::Net::test(const std::vector<std::vector<float>> &samples,
-                           const std::vector<std::vector<uint8_t>> &labels, float subset,
+//--------------------------------------------------------------------------------------------------
+float NetEngine::Net::test(const std::vector<std::vector<float>>& samples,
+                           const std::vector<std::vector<uint8_t>>& labels, float subset,
                            float threshold, size_t n_threads) {
     // std::thread::hardware_concurrency() can return 0
     if (n_threads == 0)

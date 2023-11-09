@@ -5,5 +5,9 @@
     "black-formatter.args": [
         "--line-length=100"
     ],
-    "C_Cpp.errorSquiggles": "disabled"
+    "C_Cpp.errorSquiggles": "disabled",
+    "files.associations": {
+        "*.cm": "c",
+        "iomanip": "cpp"
+    }
 }

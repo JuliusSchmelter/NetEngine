@@ -5,15 +5,15 @@
 #include <iostream>
 #include <thread>
 
-//------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------
 // Calculate deltas for given samples and labels
-//------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------
 // note: passing Eigen::Map instead of Eigen::Vector is necessary to preserve
 // constness
 void NetEngine::Net::get_weight_mods(
-    const std::vector<Eigen::Map<const Eigen::VectorXf>> &samples,
-    const std::vector<Eigen::Map<const Eigen::VectorX<uint8_t>>> &labels,
-    std::vector<Eigen::MatrixXf> &weight_mods) {
+    const std::vector<Eigen::Map<const Eigen::VectorXf>>& samples,
+    const std::vector<Eigen::Map<const Eigen::VectorX<uint8_t>>>& labels,
+    std::vector<Eigen::MatrixXf>& weight_mods) {
     // check for wrong dimensions
     if (samples.size() != labels.size())
         throw NetEngine::SetSizeError(samples.size(), labels.size());
@@ -81,10 +81,10 @@ void NetEngine::Net::get_weight_mods(
     }
 }
 
-//------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------
 // basic training, no mini batching or multithreading
-//------------------------------------------------------------------------------
-void NetEngine::Net::train(const std::vector<float> &sample, const std::vector<uint8_t> &label) {
+//--------------------------------------------------------------------------------------------------
+void NetEngine::Net::train(const std::vector<float>& sample, const std::vector<uint8_t>& label) {
     // check for wrong dimensions
     if (sample.size() != m_layout.front())
         throw NetEngine::DimensionError(sample.size(), m_layout.front());
@@ -111,11 +111,11 @@ void NetEngine::Net::train(const std::vector<float> &sample, const std::vector<u
         m_weights[i] += weight_mods[i];
 }
 
-//------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------
 // training with mini batching and multithreading
-//------------------------------------------------------------------------------
-void NetEngine::Net::train(const std::vector<std::vector<float>> &samples,
-                           const std::vector<std::vector<uint8_t>> &labels, size_t n_batches,
+//--------------------------------------------------------------------------------------------------
+void NetEngine::Net::train(const std::vector<std::vector<float>>& samples,
+                           const std::vector<std::vector<uint8_t>>& labels, size_t n_batches,
                            size_t batch_size, size_t start_pos, size_t n_threads) {
     // std::thread::hardware_concurrency() can return 0
     if (n_threads == 0)

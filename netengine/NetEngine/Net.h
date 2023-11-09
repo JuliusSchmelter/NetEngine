@@ -30,7 +30,7 @@ namespace NetEngine {
         float get_eta_bias();
         void set_eta_bias(float eta_bias);
 
-        void print();
+        std::string info_string();
         size_t n_parameters();
         void set_random();
         std::vector<float> run(const std::vector<float>& sample);

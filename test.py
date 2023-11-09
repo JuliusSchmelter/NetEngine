@@ -51,7 +51,16 @@ print(net)
 
 # Train and test.
 trained = 0
+max_acc = 0
+max_acc_at = 0
 while True:
     net.train(train_images, train_labels, MINI_BATCHES, MINI_BATCH_SIZE, trained % N_TRAIN)
     trained += MINI_BATCHES * MINI_BATCH_SIZE
-    print(f"trained: {trained} | accuracy: {100 * net.test(test_images, test_labels):.2f}%")
+
+    acc = 100 * net.test(test_images, test_labels)
+    if acc > max_acc:
+        max_acc = acc
+        max_acc_at = trained
+
+    print(f"trained: {trained} | accuracy: {acc:.2f}%")
+    print(f"maximum accuracy: {max_acc:.2f}% | at trained: {max_acc_at}")

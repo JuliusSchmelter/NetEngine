@@ -64,3 +64,12 @@ while True:
 
     print(f"trained: {trained} | accuracy: {acc:.2f}%")
     print(f"maximum accuracy: {max_acc:.2f}% | at trained: {max_acc_at}")
+
+
+# Results:
+#
+# layout: 784 | 500 | 200 | 60 | 10
+# parameters: 505370
+# eta: 0.1
+# eta_bias: 0.02
+# maximum accuracy: 96.97% | at trained: 21,364,736

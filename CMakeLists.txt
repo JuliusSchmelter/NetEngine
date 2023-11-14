@@ -1,13 +1,22 @@
-cmake_minimum_required(VERSION 3.0.0)
-project(BigEarthNet)
+cmake_minimum_required(VERSION 3.25)
+project(NetEngineTest LANGUAGES CXX CUDA)
 
-# build netlib
-add_subdirectory(NetEngine)
+# CUDA options
+# set(CMAKE_CUDA_ARCHITECTURES 75)
+# set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc)
+# find_package(CUDAToolkit)
+# set(CMAKE_CUDA_STANDARD 14)
 
-# make exe
+# set_target_properties(NetEngineTest PROPERTIES CUDA_ARCHITECTURES 75)
+
+
+# Build lib.
+add_subdirectory(netengine/NetEngine)
+
+# Make exe.
 add_executable(NetEngineTest main.cpp)
 
-# include and link netlib
+# Include and link lib.
 target_include_directories(NetEngineTest PRIVATE NetEngine)
 target_link_libraries(NetEngineTest PRIVATE NetEngine)
 

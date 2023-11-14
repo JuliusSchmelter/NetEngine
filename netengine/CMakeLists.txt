@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 3.24.0)
-project(netengine)
+cmake_minimum_required(VERSION 3.25)
+project(netengine LANGUAGES CXX CUDA)
 
 # Set C++ options.
 # Library depends on C++ 17.

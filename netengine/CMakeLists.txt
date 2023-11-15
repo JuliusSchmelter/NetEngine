@@ -1,8 +1,7 @@
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.18)
 project(netengine LANGUAGES CXX CUDA)
 
-# Set C++ options.
-# Library depends on C++ 17.
+# Set C++ version.
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
@@ -18,3 +17,6 @@ add_subdirectory(NetEngine)
 
 # Link NetEngine to netengine python module.
 target_link_libraries(netengine PRIVATE NetEngine)
+
+# Set CUDA architecture
+set_target_properties(netengine PROPERTIES CUDA_ARCHITECTURES 75)

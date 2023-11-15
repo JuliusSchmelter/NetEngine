@@ -34,14 +34,14 @@ namespace NetEngine {
         size_t n_parameters();
         void set_random();
         std::vector<float> run(const std::vector<float>& sample);
-        // basic training, no mini batching or multithreading
-        void train(const std::vector<float>& sample, const std::vector<uint8_t>& label);
-        // training with mini batching and multithreading
+
+        // Train net.
         void train(const std::vector<std::vector<float>>& samples,
                    const std::vector<std::vector<uint8_t>>& labels, size_t n_batches,
                    size_t batch_size, size_t start_pos = 0,
                    size_t n_threads = std::thread::hardware_concurrency());
-        // test accuracy
+
+        // Test accuracy.
         float test(const std::vector<std::vector<float>>& samples,
                    const std::vector<std::vector<uint8_t>>& labels, float subset = 100.0f,
                    float threshold = NAN, size_t n_threads = std::thread::hardware_concurrency());

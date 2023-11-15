@@ -1,13 +1,12 @@
-#include "Exceptions.h"
-#include "Net.h"
-
 #include <iostream>
 #include <math.h>
 #include <thread>
 
+#include "Exceptions.h"
+#include "Net.h"
+
 //--------------------------------------------------------------------------------------------------
-// test accuracy thread
-//--------------------------------------------------------------------------------------------------
+// Thread to test accuracy.
 void NetEngine::Net::test_thread(const std::vector<std::vector<float>>& samples,
                                  const std::vector<std::vector<uint8_t>>& labels, float& output,
                                  size_t start_pos, size_t batch_size, float subset,
@@ -63,8 +62,7 @@ void NetEngine::Net::test_thread(const std::vector<std::vector<float>>& samples,
 }
 
 //--------------------------------------------------------------------------------------------------
-// test accuracy
-//--------------------------------------------------------------------------------------------------
+// Test the net.
 float NetEngine::Net::test(const std::vector<std::vector<float>>& samples,
                            const std::vector<std::vector<uint8_t>>& labels, float subset,
                            float threshold, size_t n_threads) {

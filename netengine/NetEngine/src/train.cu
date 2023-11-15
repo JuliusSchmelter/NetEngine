@@ -1,15 +1,13 @@
-#include "Exceptions.h"
-#include "Net.h"
-
 #include <cassert>
 #include <iostream>
 #include <thread>
 
+#include "Exceptions.h"
+#include "Net.h"
+
 //--------------------------------------------------------------------------------------------------
-// Calculate deltas for given samples and labels
-//--------------------------------------------------------------------------------------------------
-// note: passing Eigen::Map instead of Eigen::Vector is necessary to preserve
-// constness
+// Calculate deltas for given samples and labels.
+// Note: passing Eigen::Map instead of Eigen::Vector is necessary to preserve constness.
 void NetEngine::Net::get_weight_mods(
     const std::vector<Eigen::Map<const Eigen::VectorXf>>& samples,
     const std::vector<Eigen::Map<const Eigen::VectorX<uint8_t>>>& labels,
@@ -82,41 +80,11 @@ void NetEngine::Net::get_weight_mods(
 }
 
 //--------------------------------------------------------------------------------------------------
-// basic training, no mini batching or multithreading
-//--------------------------------------------------------------------------------------------------
-void NetEngine::Net::train(const std::vector<float>& sample, const std::vector<uint8_t>& label) {
-    // check for wrong dimensions
-    if (sample.size() != m_layout.front())
-        throw NetEngine::DimensionError(sample.size(), m_layout.front());
-
-    if (label.size() != m_layout.back())
-        throw NetEngine::DimensionError(label.size(), m_layout.back());
-
-    // get vector of Eigen vector for sample, this does not copy the data
-    std::vector<Eigen::Map<const Eigen::VectorXf>> sample_eigen;
-    sample_eigen.push_back(Eigen::Map<const Eigen::VectorXf>(sample.data(), sample.size()));
-
-    // get vector of Eigen vector for label, this does not copy the data
-    std::vector<Eigen::Map<const Eigen::VectorX<uint8_t>>> label_eigen;
-    label_eigen.push_back(Eigen::Map<const Eigen::VectorX<uint8_t>>(label.data(), label.size()));
-
-    // get vector for weight mods
-    std::vector<Eigen::MatrixXf> weight_mods;
-
-    // calculate weight mods
-    get_weight_mods(sample_eigen, label_eigen, weight_mods);
-
-    // apply weight mods
-    for (size_t i = 0; i < m_weights.size(); i++)
-        m_weights[i] += weight_mods[i];
-}
-
-//--------------------------------------------------------------------------------------------------
-// training with mini batching and multithreading
-//--------------------------------------------------------------------------------------------------
+// Train the net.
 void NetEngine::Net::train(const std::vector<std::vector<float>>& samples,
                            const std::vector<std::vector<uint8_t>>& labels, size_t n_batches,
                            size_t batch_size, size_t start_pos, size_t n_threads) {
+
     // std::thread::hardware_concurrency() can return 0
     if (n_threads == 0)
         n_threads = 4;

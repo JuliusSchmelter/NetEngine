@@ -7,6 +7,7 @@
     ],
     "C_Cpp.errorSquiggles": "disabled",
     "files.associations": {
-        "*.cm": "c"
+        "*.cm": "c",
+        "cstdint": "cpp"
     }
 }

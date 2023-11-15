@@ -1,9 +1,9 @@
-#include "Net.h"
-#include "Exceptions.h"
-
 #include <cassert>
 #include <iomanip>
 #include <iostream>
+
+#include "Exceptions.h"
+#include "Net.h"
 
 //--------------------------------------------------------------------------------------------------
 // constructor

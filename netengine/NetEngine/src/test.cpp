@@ -8,7 +8,7 @@
 //--------------------------------------------------------------------------------------------------
 // Test the net.
 float NetEngine::Net::test_on_cpu(const std::vector<std::vector<float>>& samples,
-                                  const std::vector<std::vector<uint8_t>>& labels, float subset,
+                                  const std::vector<std::vector<uint32_t>>& labels, float subset,
                                   float threshold, size_t n_threads) {
     // std::thread::hardware_concurrency() can return 0
     if (n_threads == 0)
@@ -64,9 +64,9 @@ float NetEngine::Net::test_on_cpu(const std::vector<std::vector<float>>& samples
 //--------------------------------------------------------------------------------------------------
 // Thread to test accuracy.
 void NetEngine::Net::test_thread_cpu(const std::vector<std::vector<float>>& samples,
-                                     const std::vector<std::vector<uint8_t>>& labels, float& output,
-                                     size_t start_pos, size_t batch_size, float subset,
-                                     float threshold) {
+                                     const std::vector<std::vector<uint32_t>>& labels,
+                                     float& output, size_t start_pos, size_t batch_size,
+                                     float subset, float threshold) {
     // check for bad inputs
     if (samples.size() != labels.size())
         throw NetEngine::SetSizeError(samples.size(), labels.size());
@@ -82,9 +82,9 @@ void NetEngine::Net::test_thread_cpu(const std::vector<std::vector<float>>& samp
             for (size_t i = start_pos; i < start_pos + batch_size; i++) {
                 std::vector<float> output = run(samples[i]);
 
-                uint8_t result = std::max_element(output.begin(), output.end()) - output.begin();
+                uint32_t result = std::max_element(output.begin(), output.end()) - output.begin();
 
-                uint8_t label =
+                uint32_t label =
                     std::max_element(labels[i].begin(), labels[i].end()) - labels[i].begin();
 
                 if (result == label)
@@ -102,9 +102,9 @@ void NetEngine::Net::test_thread_cpu(const std::vector<std::vector<float>>& samp
 
                 std::vector<float> output = run(samples[j]);
 
-                uint8_t result = std::max_element(output.begin(), output.end()) - output.begin();
+                uint32_t result = std::max_element(output.begin(), output.end()) - output.begin();
 
-                uint8_t label =
+                uint32_t label =
                     std::max_element(labels[j].begin(), labels[j].end()) - labels[j].begin();
 
                 if (result == label)

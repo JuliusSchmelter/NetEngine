@@ -78,6 +78,7 @@
         "typeinfo": "cpp",
         "valarray": "cpp",
         "variant": "cpp",
-        "format": "cpp"
+        "format": "cpp",
+        "core": "cpp"
     }
 }

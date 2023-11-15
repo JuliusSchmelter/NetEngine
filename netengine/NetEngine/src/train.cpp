@@ -8,8 +8,9 @@
 //--------------------------------------------------------------------------------------------------
 // Train the net.
 void NetEngine::Net::train_on_cpu(const std::vector<std::vector<float>>& samples,
-                                  const std::vector<std::vector<uint8_t>>& labels, size_t n_batches,
-                                  size_t batch_size, size_t start_pos, size_t n_threads) {
+                                  const std::vector<std::vector<uint32_t>>& labels,
+                                  size_t n_batches, size_t batch_size, size_t start_pos,
+                                  size_t n_threads) {
 
     // std::thread::hardware_concurrency() can return 0
     if (n_threads == 0)
@@ -55,7 +56,8 @@ void NetEngine::Net::train_on_cpu(const std::vector<std::vector<float>>& samples
         // allocate storage for threads
         std::vector<std::vector<Eigen::MatrixXf>> weight_mods(n_threads);
         std::vector<std::vector<Eigen::Map<const Eigen::VectorXf>>> samples_eigen(n_threads);
-        std::vector<std::vector<Eigen::Map<const Eigen::VectorX<uint8_t>>>> labels_eigen(n_threads);
+        std::vector<std::vector<Eigen::Map<const Eigen::VectorX<uint32_t>>>> labels_eigen(
+            n_threads);
 
         // split samples on threads
         size_t samples_per_thread = current_batch_size / n_threads;
@@ -79,7 +81,7 @@ void NetEngine::Net::train_on_cpu(const std::vector<std::vector<float>>& samples
                 samples_eigen[j].push_back(Eigen::Map<const Eigen::VectorXf>(
                     samples[pos + k].data(), samples[pos + k].size()));
 
-                labels_eigen[j].push_back(Eigen::Map<const Eigen::VectorX<uint8_t>>(
+                labels_eigen[j].push_back(Eigen::Map<const Eigen::VectorX<uint32_t>>(
                     labels[pos + k].data(), labels[pos + k].size()));
             }
 
@@ -93,9 +95,8 @@ void NetEngine::Net::train_on_cpu(const std::vector<std::vector<float>>& samples
 
         // dispatch threads
         for (size_t j = 0; j < n_threads; j++)
-            threads.push_back(std::thread(&Net::get_weight_mods_cpu, this,
-                                          std::ref(samples_eigen[j]), std::ref(labels_eigen[j]),
-                                          std::ref(weight_mods[j])));
+            threads.push_back(std::thread(&Net::get_weight_mods, this, std::ref(samples_eigen[j]),
+                                          std::ref(labels_eigen[j]), std::ref(weight_mods[j])));
 
         // join threads and apply weight modifications
         // note: iterate backwards because later threads potentially have fewer
@@ -116,9 +117,9 @@ void NetEngine::Net::train_on_cpu(const std::vector<std::vector<float>>& samples
 //--------------------------------------------------------------------------------------------------
 // Calculate deltas for given samples and labels.
 // Note: passing Eigen::Map instead of Eigen::Vector is necessary to preserve constness.
-void NetEngine::Net::get_weight_mods_cpu(
+void NetEngine::Net::get_weight_mods(
     const std::vector<Eigen::Map<const Eigen::VectorXf>>& samples,
-    const std::vector<Eigen::Map<const Eigen::VectorX<uint8_t>>>& labels,
+    const std::vector<Eigen::Map<const Eigen::VectorX<uint32_t>>>& labels,
     std::vector<Eigen::MatrixXf>& weight_mods) {
     // check for wrong dimensions
     if (samples.size() != labels.size())

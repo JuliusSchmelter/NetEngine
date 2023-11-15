@@ -5,10 +5,60 @@
 #include "Exceptions.h"
 #include "Net.h"
 
+// GPU kernel for backpropagation.
+__global__ void backprop_sample(size_t weight_layers, Eigen::Map<Eigen::MatrixXf>* weights,
+                                Eigen::Map<Eigen::MatrixXf>* weight_mods,
+                                Eigen::Map<Eigen::VectorXf>* a, Eigen::Map<Eigen::VectorXf>* z,
+                                Eigen::Map<Eigen::VectorXf>* deltas, float* sample, uint32_t* label,
+                                float eta, float eta_bias) {
+    Eigen::Map<Eigen::VectorXf> sample_eigen(sample, deltas[weight_layers - 1].size());
+
+    // Run first layer. Last column is bias.
+    z[0] = weights[0].leftCols(weights[0].cols() - 1) * sample_eigen +
+           weights[0].col(weights[0].cols() - 1);
+
+    a[0] = z[0].unaryExpr([](float x) { return 0.5f + 0.5f * x / (1.0f + fabsf(x)); });
+
+    // Run remaining layers.
+    for (size_t j = 1; j < weight_layers; j++) {
+        z[j] = weights[j].leftCols(weights[j].cols() - 1) * a[j - 1] +
+               weights[j].col(weights[j].cols() - 1);
+
+        a[j] = z[j].unaryExpr([](float x) { return 0.5f + 0.5f * x / (1.0f + fabsf(x)); });
+    }
+
+    // Get delta of last layer. Get loss by comparing activation with label, then take
+    // hadamard product with first derivative of sigmoid of weighted input.
+    for (size_t j = 0; j < deltas[weight_layers - 1].size(); j++) {
+        deltas[weight_layers - 1][j] = (a[weight_layers - 1][j] - label[j]) /
+                                       (1.0f + powf(fabsf(z[weight_layers - 1][j]), 2.0f));
+    }
+
+    // Get delta of remaining layers. Backpropagate delta of following layer, then take
+    // hadamard product with first derivative of sigmoid of weighted input.
+    for (size_t j = weight_layers - 1; j >= 1; j--) {
+        deltas[j - 1] = (weights[j].leftCols(weights[j].cols() - 1).transpose() * deltas[j])
+                            .cwiseProduct(z[j - 1].unaryExpr(
+                                [](float x) { return 1.0f / (1.0f + powf(fabsf(x), 2.0f)); }));
+    }
+
+    // Output weight modification.
+    weight_mods[0].leftCols(weight_mods[0].cols() - 1) -=
+        eta * deltas[0] * sample_eigen.transpose();
+    weight_mods[0].col(weight_mods[0].cols() - 1) -= eta_bias * deltas[0];
+
+    for (size_t j = 1; j < weight_layers; j++) {
+        weight_mods[j].leftCols(weight_mods[j].cols() - 1) -=
+            eta * deltas[j] * a[j - 1].transpose();
+
+        weight_mods[j].col(weight_mods[j].cols() - 1) -= eta_bias * deltas[j];
+    }
+}
+
 //--------------------------------------------------------------------------------------------------
 // Train the net.
 void NetEngine::Net::train(const std::vector<std::vector<float>>& samples,
-                           const std::vector<std::vector<uint8_t>>& labels, size_t n_batches,
+                           const std::vector<std::vector<uint32_t>>& labels, size_t n_batches,
                            size_t batch_size, size_t start_pos, size_t n_threads) {
     // check for bad inputs
     if (samples[0].size() != m_layout.front())
@@ -45,21 +95,6 @@ void NetEngine::Net::train(const std::vector<std::vector<float>>& samples,
             batch++;
         }
 
-        // Wrap samples and labels for eigen.
-        std::vector<Eigen::Map<const Eigen::VectorXf>> batch_samples;
-        batch_samples.reserve(current_batch_size);
-
-        std::vector<Eigen::Map<const Eigen::VectorX<uint8_t>>> batch_labels;
-        batch_labels.reserve(current_batch_size);
-
-        for (size_t cursor = pos; cursor < pos + current_batch_size; cursor++) {
-            batch_samples.push_back(
-                Eigen::Map<const Eigen::VectorXf>(samples[cursor].data(), samples[cursor].size()));
-
-            batch_labels.push_back(Eigen::Map<const Eigen::VectorX<uint8_t>>(
-                labels[cursor].data(), labels[cursor].size()));
-        }
-
         pos += current_batch_size;
 
         // Init weight mods.
@@ -68,64 +103,97 @@ void NetEngine::Net::train(const std::vector<std::vector<float>>& samples,
         for (size_t i = 0; i < m_weights.size(); i++)
             weight_mods.push_back(Eigen::MatrixXf::Zero(m_weights[i].rows(), m_weights[i].cols()));
 
-        // temporary storage for activation values and deltas
-        std::vector<Eigen::VectorXf> z(m_weights.size());
-        std::vector<Eigen::VectorXf> a(m_weights.size());
-        std::vector<Eigen::VectorXf> deltas;
-        deltas.reserve(m_weights.size());
-        for (size_t i = 0; i < m_weights.size(); i++)
-            deltas.push_back(Eigen::VectorXf(m_layout[i + 1]));
+        // Initialize weights and weight mods on the device.
+        // Also, initialize temporary storage for activation values and deltas on device,
+        // because allocating inside the kernel is not recommended.
+        Eigen::Map<Eigen::MatrixXf>* device_weights;
+        cudaMallocManaged(&device_weights, m_weights.size() * sizeof(Eigen::Map<Eigen::MatrixXf>));
 
-        // run batch
-        for (size_t sample = 0; sample < batch_samples.size(); sample++) {
-            // run first layer
-            // note: last column is bias
-            z[0] = m_weights[0].leftCols(m_weights[0].cols() - 1) * batch_samples[sample] +
-                   m_weights[0].col(m_weights[0].cols() - 1);
+        Eigen::Map<Eigen::MatrixXf>* device_weight_mods;
+        cudaMallocManaged(&device_weight_mods,
+                          m_weights.size() * sizeof(Eigen::Map<Eigen::MatrixXf>));
 
-            a[0] = z[0].unaryExpr([](float x) { return 0.5f + 0.5f * x / (1.0f + fabsf(x)); });
+        Eigen::Map<Eigen::VectorXf>* device_a;
+        cudaMallocManaged(&device_a, m_weights.size() * sizeof(Eigen::Map<Eigen::VectorXf>));
 
-            // run remaining layers
-            for (size_t j = 1; j < m_weights.size(); j++) {
-                z[j] = m_weights[j].leftCols(m_weights[j].cols() - 1) * a[j - 1] +
-                       m_weights[j].col(m_weights[j].cols() - 1);
+        Eigen::Map<Eigen::VectorXf>* device_z;
+        cudaMallocManaged(&device_z, m_weights.size() * sizeof(Eigen::Map<Eigen::VectorXf>));
 
-                a[j] = z[j].unaryExpr([](float x) { return 0.5f + 0.5f * x / (1.0f + fabsf(x)); });
-            }
+        Eigen::Map<Eigen::VectorXf>* device_deltas;
+        cudaMallocManaged(&device_deltas, m_weights.size() * sizeof(Eigen::Map<Eigen::VectorXf>));
 
-            // get delta of last layer. get loss by comparing activation with
-            // label, then take hadamard product with first derivative of
-            // sigmoid of weighted input.
-            for (size_t j = 0; j < m_layout.back(); j++)
-                deltas.back()[j] =
-                    (a.back()[j] - batch_labels[sample][j]) / (1.0f + powf(fabsf(z.back()[j]), 2));
+        for (size_t i = 0; i < m_weights.size(); i++) {
+            float* data;
+            cudaMalloc(&data, m_weights[i].size() * sizeof(float));
+            cudaMemcpy(data, m_weights[i].data(), m_weights[i].size() * sizeof(float),
+                       cudaMemcpyHostToDevice);
+            device_weights[i] =
+                Eigen::Map<Eigen::MatrixXf>(data, m_weights[i].rows(), m_weights[i].cols());
 
-            // get delta of remaining layers. backpropagate delta of following
-            // layer, then take hadamard product with first derivative of
-            // sigmoid of weighted input
-            for (size_t j = m_weights.size() - 1; j >= 1; j--)
-                deltas[j - 1] =
-                    (m_weights[j].leftCols(m_weights[j].cols() - 1).transpose() * deltas[j])
-                        .cwiseProduct(z[j - 1].unaryExpr(
-                            [](float x) { return 1.0f / (1.0f + powf(fabsf(x), 2)); }));
+            float* zeros;
+            cudaMalloc(&zeros, m_weights[i].size() * sizeof(float));
+            cudaMemset(zeros, 0, m_weights[i].size() * sizeof(float));
+            device_weight_mods[i] =
+                Eigen::Map<Eigen::MatrixXf>(zeros, m_weights[i].rows(), m_weights[i].cols());
 
-            // Output weight modification.
-            // weights
-            weight_mods[0].leftCols(weight_mods[0].cols() - 1) -=
-                m_eta * deltas[0] * batch_samples[sample].transpose();
+            float* a;
+            cudaMalloc(&a, m_layout[i + 1] * sizeof(float));
+            device_a[i] = Eigen::Map<Eigen::VectorXf>(a, m_layout[i + 1]);
 
-            // biases
-            weight_mods[0].col(weight_mods[0].cols() - 1) -= m_eta_bias * deltas[0];
+            float* z;
+            cudaMalloc(&z, m_layout[i + 1] * sizeof(float));
+            device_z[i] = Eigen::Map<Eigen::VectorXf>(z, m_layout[i + 1]);
 
-            for (size_t j = 1; j < weight_mods.size(); j++) {
-                // weights
-                weight_mods[j].leftCols(weight_mods[j].cols() - 1) -=
-                    m_eta * deltas[j] * a[j - 1].transpose();
-
-                // biases
-                weight_mods[j].col(weight_mods[j].cols() - 1) -= m_eta_bias * deltas[j];
-            }
+            float* deltas;
+            cudaMalloc(&deltas, m_layout[i + 1] * sizeof(float));
+            device_deltas[i] = Eigen::Map<Eigen::VectorXf>(deltas, m_layout[i + 1]);
         }
+
+        cudaMallocManaged(&device_a, m_weights.size() * sizeof(Eigen::Map<Eigen::MatrixXf>));
+        cudaMallocManaged(&device_z, m_weights.size() * sizeof(Eigen::Map<Eigen::MatrixXf>));
+        cudaMallocManaged(&device_deltas, m_weights.size() * sizeof(Eigen::Map<Eigen::MatrixXf>));
+
+        // Run batch.
+        for (size_t cursor = pos; cursor < pos + current_batch_size; cursor++) {
+            // Allocate sample and label on device.
+            float* sample;
+            uint32_t* label;
+
+            cudaMalloc(&sample, samples[cursor].size() * sizeof(float));
+            cudaMalloc(&label, labels[cursor].size() * sizeof(uint32_t));
+
+            cudaMemcpy(sample, samples[cursor].data(), samples[cursor].size() * sizeof(float),
+                       cudaMemcpyHostToDevice);
+            cudaMemcpy(label, labels[cursor].data(), labels[cursor].size() * sizeof(uint32_t),
+                       cudaMemcpyHostToDevice);
+
+            // Run backprop kernel.
+            backprop_sample<<<1, 1>>>(m_weights.size(), device_weights, device_weight_mods,
+                                      device_a, device_z, device_deltas, sample, label, m_eta,
+                                      m_eta_bias);
+            cudaDeviceSynchronize();
+
+            cudaFree((void*)sample);
+            cudaFree((void*)label);
+        }
+
+        // Retrieve weight mods from device.
+        for (size_t i = 0; i < m_weights.size(); i++) {
+            cudaMemcpy(weight_mods[i].data(), &device_weight_mods[i],
+                       weight_mods[i].size() * sizeof(float), cudaMemcpyDeviceToHost);
+
+            cudaFree((void*)&device_weights[i]);
+            cudaFree((void*)&device_weight_mods[i]);
+            cudaFree((void*)&device_a[i]);
+            cudaFree((void*)&device_z[i]);
+            cudaFree((void*)&device_deltas[i]);
+        }
+
+        cudaFree((void*)device_weights);
+        cudaFree((void*)device_weight_mods);
+        cudaFree((void*)device_a);
+        cudaFree((void*)device_z);
+        cudaFree((void*)device_deltas);
 
         for (size_t i = 0; i < m_weights.size(); i++)
             m_weights[i] += weight_mods[i] / (float)current_batch_size;

@@ -8,7 +8,7 @@
 //--------------------------------------------------------------------------------------------------
 // Test the net.
 float NetEngine::Net::test(const std::vector<std::vector<float>>& samples,
-                           const std::vector<std::vector<uint8_t>>& labels, float subset,
+                           const std::vector<std::vector<uint32_t>>& labels, float subset,
                            float threshold, size_t n_threads) {
     // std::thread::hardware_concurrency() can return 0
     if (n_threads == 0)
@@ -44,7 +44,7 @@ float NetEngine::Net::test(const std::vector<std::vector<float>>& samples,
             n[i] = samples_per_thread;
 
         // dispatch thread
-        threads.push_back(std::thread(&Net::test_thread, this, std::ref(samples), std ::ref(labels),
+        threads.push_back(std::thread(&Net::test_thread, this, std::ref(samples), std::ref(labels),
                                       std::ref(outputs[i]), pos, n[i], subset, threshold));
 
         pos += n[i];
@@ -63,7 +63,7 @@ float NetEngine::Net::test(const std::vector<std::vector<float>>& samples,
 //--------------------------------------------------------------------------------------------------
 // Thread to test accuracy.
 void NetEngine::Net::test_thread(const std::vector<std::vector<float>>& samples,
-                                 const std::vector<std::vector<uint8_t>>& labels, float& output,
+                                 const std::vector<std::vector<uint32_t>>& labels, float& output,
                                  size_t start_pos, size_t batch_size, float subset,
                                  float threshold) {
     // check for bad inputs

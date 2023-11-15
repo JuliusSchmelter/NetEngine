@@ -17,9 +17,18 @@ namespace NetEngine {
                              const std::vector<Eigen::Map<const Eigen::VectorX<uint8_t>>>& labels,
                              std::vector<Eigen::MatrixXf>& weight_mods);
 
+        void
+        get_weight_mods_cpu(const std::vector<Eigen::Map<const Eigen::VectorXf>>& samples,
+                            const std::vector<Eigen::Map<const Eigen::VectorX<uint8_t>>>& labels,
+                            std::vector<Eigen::MatrixXf>& weight_mods);
+
         void test_thread(const std::vector<std::vector<float>>& samples,
                          const std::vector<std::vector<uint8_t>>& labels, float& output,
                          size_t start_pos, size_t batch_size, float subset, float threshold);
+
+        void test_thread_cpu(const std::vector<std::vector<float>>& samples,
+                             const std::vector<std::vector<uint8_t>>& labels, float& output,
+                             size_t start_pos, size_t batch_size, float subset, float threshold);
 
     public:
         Net(const std::vector<size_t>& layout, float eta, float eta_bias);
@@ -33,18 +42,32 @@ namespace NetEngine {
         std::string info_string();
         size_t n_parameters();
         void set_random();
+
+        // Run one sample on the net.
         std::vector<float> run(const std::vector<float>& sample);
 
-        // Train net.
+        // Train net on GPU.
         void train(const std::vector<std::vector<float>>& samples,
                    const std::vector<std::vector<uint8_t>>& labels, size_t n_batches,
                    size_t batch_size, size_t start_pos = 0,
                    size_t n_threads = std::thread::hardware_concurrency());
 
-        // Test accuracy.
+        // Train net on CPU.
+        void train_on_cpu(const std::vector<std::vector<float>>& samples,
+                          const std::vector<std::vector<uint8_t>>& labels, size_t n_batches,
+                          size_t batch_size, size_t start_pos = 0,
+                          size_t n_threads = std::thread::hardware_concurrency());
+
+        // Test accuracy on GPU.
         float test(const std::vector<std::vector<float>>& samples,
                    const std::vector<std::vector<uint8_t>>& labels, float subset = 100.0f,
                    float threshold = NAN, size_t n_threads = std::thread::hardware_concurrency());
+
+        // Test accuracy on CPU.
+        float test_on_cpu(const std::vector<std::vector<float>>& samples,
+                          const std::vector<std::vector<uint8_t>>& labels, float subset = 100.0f,
+                          float threshold = NAN,
+                          size_t n_threads = std::thread::hardware_concurrency());
     };
 }
 

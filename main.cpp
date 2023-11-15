@@ -14,8 +14,8 @@
 
 #define ETA 0.1
 #define ETA_BIAS 0.02
-#define MINI_BATCHES 16
-#define MINI_BATCH_SIZE 1024
+#define MINI_BATCHES 8
+#define MINI_BATCH_SIZE 256
 #define N_THREADS 12
 
 int main() {

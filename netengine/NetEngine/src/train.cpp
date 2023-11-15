@@ -168,7 +168,7 @@ void NetEngine::Net::get_weight_mods_cpu(
                                 .cwiseProduct(z[j - 1].unaryExpr(
                                     [](float x) { return 1.0f / (1.0f + powf(fabsf(x), 2)); }));
 
-        // ouput weight modification
+        // Output weight modification.
         // weights
         weight_mods[0].leftCols(weight_mods[0].cols() - 1) -=
             m_eta * deltas[0] * samples[i].transpose();

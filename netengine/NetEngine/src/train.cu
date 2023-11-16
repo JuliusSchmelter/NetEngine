@@ -29,8 +29,8 @@ __global__ void train_batch(size_t weight_layers, Eigen::Map<Eigen::MatrixXf>* w
 
     // Get weight mods for batch.
     for (size_t i = start_pos; i < start_pos + batch_size; i++) {
-        // Wrap sample in eigen vector.
-        Eigen::Map<Eigen::VectorXf> sample_eigen(samples[i], deltas[weight_layers - 1].size());
+        // Wrap sample in Eigen vector.
+        Eigen::Map<Eigen::VectorXf> sample_eigen(samples[i], weight_mods[0].cols() - 1);
 
         // Run first layer. Last column is bias.
         z[0] = weights[0].leftCols(weights[0].cols() - 1) * sample_eigen +
@@ -77,7 +77,7 @@ __global__ void train_batch(size_t weight_layers, Eigen::Map<Eigen::MatrixXf>* w
 
     // Apply weight mods.
     for (size_t i = 0; i < weight_layers; i++) {
-        weights[i] += weight_mods[i];
+        weights[i] += weight_mods[i] / (float)batch_size;
     }
 }
 
@@ -207,6 +207,8 @@ void NetEngine::Net::train(const std::vector<std::vector<float>>& samples,
         TRY_CUDA(cudaMemcpy(m_weights[i].data(), device_weights[i].data(),
                             m_weights[i].size() * sizeof(float), cudaMemcpyDeviceToHost));
 
+        TRY_CUDA(cudaDeviceSynchronize());
+
         TRY_CUDA(cudaFree(device_weights[i].data()));
         TRY_CUDA(cudaFree(device_weight_mods[i].data()));
         TRY_CUDA(cudaFree(device_a[i].data()));
@@ -226,6 +228,4 @@ void NetEngine::Net::train(const std::vector<std::vector<float>>& samples,
     TRY_CUDA(cudaFree(device_z));
     TRY_CUDA(cudaFree(device_deltas));
     TRY_CUDA(cudaFree(device_weight_mods));
-
-    std::cout << "stopped training\n";
 }

@@ -1,6 +1,9 @@
 #ifndef NETENGINE_NET_H
 #define NETENGINE_NET_H
 
+// Recommended for using Eigen on CUDA.
+#define EIGEN_DEFAULT_DENSE_INDEX_TYPE int
+
 #include "extern/Eigen/Dense"
 #include <thread>
 #include <vector>

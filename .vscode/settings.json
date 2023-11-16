@@ -79,6 +79,7 @@
         "valarray": "cpp",
         "variant": "cpp",
         "format": "cpp",
-        "core": "cpp"
+        "core": "cpp",
+        "dense": "cpp"
     }
 }

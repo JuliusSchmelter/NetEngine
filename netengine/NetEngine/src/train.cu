@@ -42,16 +42,21 @@ __global__ void backprop_sample(size_t weight_layers, Eigen::Map<Eigen::MatrixXf
                                 [](float x) { return 1.0f / (1.0f + powf(fabsf(x), 2.0f)); }));
     }
 
-    // Output weight modification.
+    // Compute weight modification.
     weight_mods[0].leftCols(weight_mods[0].cols() - 1) -=
         eta * deltas[0] * sample_eigen.transpose();
+
     weight_mods[0].col(weight_mods[0].cols() - 1) -= eta_bias * deltas[0];
+
+    weight_mods[0].eval();
 
     for (size_t j = 1; j < weight_layers; j++) {
         weight_mods[j].leftCols(weight_mods[j].cols() - 1) -=
             eta * deltas[j] * a[j - 1].transpose();
 
         weight_mods[j].col(weight_mods[j].cols() - 1) -= eta_bias * deltas[j];
+
+        weight_mods[j].eval();
     }
 }
 
@@ -94,8 +99,6 @@ void NetEngine::Net::train(const std::vector<std::vector<float>>& samples,
             current_batch_size = samples.size() - pos;
             batch++;
         }
-
-        pos += current_batch_size;
 
         // Init weight mods.
         std::vector<Eigen::MatrixXf> weight_mods;
@@ -149,10 +152,6 @@ void NetEngine::Net::train(const std::vector<std::vector<float>>& samples,
             device_deltas[i] = Eigen::Map<Eigen::VectorXf>(deltas, m_layout[i + 1]);
         }
 
-        cudaMallocManaged(&device_a, m_weights.size() * sizeof(Eigen::Map<Eigen::MatrixXf>));
-        cudaMallocManaged(&device_z, m_weights.size() * sizeof(Eigen::Map<Eigen::MatrixXf>));
-        cudaMallocManaged(&device_deltas, m_weights.size() * sizeof(Eigen::Map<Eigen::MatrixXf>));
-
         // Run batch.
         for (size_t cursor = pos; cursor < pos + current_batch_size; cursor++) {
             // Allocate sample and label on device.
@@ -197,6 +196,8 @@ void NetEngine::Net::train(const std::vector<std::vector<float>>& samples,
 
         for (size_t i = 0; i < m_weights.size(); i++)
             m_weights[i] += weight_mods[i] / (float)current_batch_size;
+
+        pos += current_batch_size;
 
         // wrap around to beginning of training data if necessary
         if (pos == samples.size())

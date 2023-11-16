@@ -7,6 +7,7 @@ project(NetEngineTest LANGUAGES CXX CUDA)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+# Suppress unnecessary nvcc warnings.
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr -diag-suppress 20012" )
 
 # Build lib.
@@ -22,5 +23,5 @@ target_link_libraries(NetEngineTest PRIVATE NetEngine)
 # Enable warnings and optimizations.
 add_compile_options(-Wall -Wextra -pedantic -Werror -O3)
 
-# CUDA options
+# Set CUDA architecture.
 set_target_properties(NetEngineTest PROPERTIES CUDA_ARCHITECTURES 75)

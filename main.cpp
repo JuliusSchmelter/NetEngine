@@ -16,7 +16,6 @@
 #define ETA_BIAS 0.02
 #define MINI_BATCHES 8
 #define MINI_BATCH_SIZE 256
-#define N_THREADS 12
 
 int main() {
     TIMER(main)
@@ -95,8 +94,7 @@ int main() {
     for (size_t trained = 0;; trained += MINI_BATCHES * MINI_BATCH_SIZE) {
         LOG(trained)
         TIC(train);
-        net.train(train_images, train_labels, MINI_BATCHES, MINI_BATCH_SIZE, trained % N_TRAIN,
-                  N_THREADS);
+        net.train(train_images, train_labels, MINI_BATCHES, MINI_BATCH_SIZE, trained % N_TRAIN);
         TOC(train)
 
         TIC(test)

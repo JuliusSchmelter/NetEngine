@@ -5,6 +5,8 @@
 #include <cassert>
 #include <iostream>
 
+#define THREADS_PER_BLOCK 64
+
 // Error handling for CUDA functions.
 #define TRY_CUDA(cuda_function)                                                                    \
     {                                                                                              \
@@ -85,7 +87,7 @@ __global__ void train_batch(size_t weight_layers, Eigen::Map<Eigen::MatrixXf>* w
 // Train the net.
 void NetEngine::Net::train(const std::vector<std::vector<float>>& samples,
                            const std::vector<std::vector<uint32_t>>& labels, size_t n_batches,
-                           size_t batch_size, size_t start_pos, size_t n_threads) {
+                           size_t batch_size, size_t start_pos) {
     // check for bad inputs
     if (samples[0].size() != m_layout.front())
         throw NetEngine::DimensionError(samples[0].size(), m_layout.front());
@@ -96,44 +98,21 @@ void NetEngine::Net::train(const std::vector<std::vector<float>>& samples,
     if (samples.size() != labels.size())
         throw NetEngine::SetSizeError(samples.size(), labels.size());
 
-    if (batch_size < n_threads)
-        throw NetEngine::BatchesTooSmall(batch_size, n_threads);
-
     if (batch_size > samples.size())
         throw NetEngine::BatchesTooLarge(batch_size, samples.size());
 
     if (start_pos + batch_size > samples.size())
         start_pos = 0;
 
-    // position in samples and labels
+    // Position in samples and labels.
     size_t pos = start_pos;
 
     // Copy samples, labels and weights to device.
-    // Also, initialize temporary storage on device, because allocating inside the kernel
-    // is not recommended.
     float** device_samples;
     TRY_CUDA(cudaMallocManaged(&device_samples, samples.size() * sizeof(float*)));
 
     uint32_t** device_labels;
     TRY_CUDA(cudaMallocManaged(&device_labels, labels.size() * sizeof(uint32_t*)));
-
-    Eigen::Map<Eigen::MatrixXf>* device_weights;
-    TRY_CUDA(
-        cudaMallocManaged(&device_weights, m_weights.size() * sizeof(Eigen::Map<Eigen::MatrixXf>)));
-
-    Eigen::Map<Eigen::MatrixXf>* device_weight_mods;
-    TRY_CUDA(cudaMallocManaged(&device_weight_mods,
-                               m_weights.size() * sizeof(Eigen::Map<Eigen::MatrixXf>)));
-
-    Eigen::Map<Eigen::VectorXf>* device_a;
-    TRY_CUDA(cudaMallocManaged(&device_a, m_weights.size() * sizeof(Eigen::Map<Eigen::VectorXf>)));
-
-    Eigen::Map<Eigen::VectorXf>* device_z;
-    TRY_CUDA(cudaMallocManaged(&device_z, m_weights.size() * sizeof(Eigen::Map<Eigen::VectorXf>)));
-
-    Eigen::Map<Eigen::VectorXf>* device_deltas;
-    TRY_CUDA(
-        cudaMallocManaged(&device_deltas, m_weights.size() * sizeof(Eigen::Map<Eigen::VectorXf>)));
 
     for (size_t i = 0; i < samples.size(); i++) {
         float* sample;
@@ -148,6 +127,49 @@ void NetEngine::Net::train(const std::vector<std::vector<float>>& samples,
                             cudaMemcpyHostToDevice));
         device_labels[i] = label;
     }
+
+    Eigen::Map<Eigen::MatrixXf>* device_weights;
+    TRY_CUDA(
+        cudaMallocManaged(&device_weights, m_weights.size() * sizeof(Eigen::Map<Eigen::MatrixXf>)));
+
+    for (size_t i = 0; i < m_weights.size(); i++) {
+        float* weights;
+        TRY_CUDA(cudaMalloc(&weights, m_weights[i].size() * sizeof(float)));
+        TRY_CUDA(cudaMemcpy(weights, m_weights[i].data(), m_weights[i].size() * sizeof(float),
+                            cudaMemcpyHostToDevice));
+        new (&device_weights[i])
+            Eigen::Map<Eigen::MatrixXf>(weights, m_weights[i].rows(), m_weights[i].cols());
+    }
+
+    // Determine CUDA grid dimensions.
+    // Get number of multiprocessors, use it as number of blocks.
+    int device;
+    cudaGetDevice(&device);
+    struct cudaDeviceProp props;
+    cudaGetDeviceProperties(&props, device);
+    int n_blocks = props.multiProcessorCount;
+    int n_threads = n_blocks * THREADS_PER_BLOCK;
+    int samples_per_thread = batch_size / n_threads ? batch_size / n_threads : 1;
+    int real_batch_size = n_threads * samples_per_thread;
+    LOG(real_batch_size)
+
+    // Initialize temporary storage on device, because allocating inside the kernel
+    // is not recommended.
+
+    // Each block needs a weight_mods instance.
+    Eigen::Map<Eigen::MatrixXf>* device_weight_mods;
+    TRY_CUDA(cudaMallocManaged(&device_weight_mods,
+                               m_weights.size() * sizeof(Eigen::Map<Eigen::MatrixXf>)));
+
+    Eigen::Map<Eigen::VectorXf>* device_a;
+    TRY_CUDA(cudaMallocManaged(&device_a, m_weights.size() * sizeof(Eigen::Map<Eigen::VectorXf>)));
+
+    Eigen::Map<Eigen::VectorXf>* device_z;
+    TRY_CUDA(cudaMallocManaged(&device_z, m_weights.size() * sizeof(Eigen::Map<Eigen::VectorXf>)));
+
+    Eigen::Map<Eigen::VectorXf>* device_deltas;
+    TRY_CUDA(
+        cudaMallocManaged(&device_deltas, m_weights.size() * sizeof(Eigen::Map<Eigen::VectorXf>)));
 
     for (size_t i = 0; i < m_weights.size(); i++) {
         float* weights;
@@ -179,23 +201,14 @@ void NetEngine::Net::train(const std::vector<std::vector<float>>& samples,
     for (size_t batch = 0; batch < n_batches; batch++) {
         std::cout << "batch " << batch + 1 << ", pos = " << pos << '\n';
 
-        // Combine batches if next batch would not fit in training data.
-        size_t current_batch_size;
-        if (pos + 2 * batch_size <= samples.size())
-            current_batch_size = batch_size;
-        else {
-            current_batch_size = samples.size() - pos;
-            batch++;
-        }
-
         // Train batch on GPU.
-        train_batch<<<1, 1>>>(m_weights.size(), device_weights, device_weight_mods, device_a,
-                              device_z, device_deltas, device_samples, device_labels, pos,
-                              current_batch_size, m_eta, m_eta_bias);
+        train_batch<<<n_blocks, THREADS_PER_BLOCK>>>(
+            m_weights.size(), device_weights, device_weight_mods, device_a, device_z, device_deltas,
+            device_samples, device_labels, pos, real_batch_size, m_eta, m_eta_bias);
 
         TRY_CUDA(cudaDeviceSynchronize());
 
-        pos += current_batch_size;
+        pos += real_batch_size;
 
         // Wrap around to beginning of training data if necessary.
         if (pos == samples.size())

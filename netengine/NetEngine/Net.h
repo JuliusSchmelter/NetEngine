@@ -47,8 +47,7 @@ namespace NetEngine {
         // Train net on GPU.
         void train(const std::vector<std::vector<float>>& samples,
                    const std::vector<std::vector<uint32_t>>& labels, size_t n_batches,
-                   size_t batch_size, size_t start_pos = 0,
-                   size_t n_threads = std::thread::hardware_concurrency());
+                   size_t batch_size, size_t start_pos = 0);
 
         // Train net on CPU.
         void train_on_cpu(const std::vector<std::vector<float>>& samples,

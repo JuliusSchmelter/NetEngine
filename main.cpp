@@ -18,6 +18,13 @@
 #define MINI_BATCH_SIZE 256
 
 int main() {
+    NetEngine::test_func();
+
+    return 0;
+}
+
+/*
+int main() {
     TIMER(main)
 
     // init net
@@ -102,3 +109,4 @@ int main() {
         TOC(test)
     }
 }
+*/

@@ -1,85 +1,69 @@
+#include <cassert>
+#include <iostream>
+
 #include "DevTools.h"
 #include "Exceptions.h"
 #include "Net.h"
 
-#include <cassert>
-#include <iostream>
+// CUDA kernel for matrix multiplication.
+// A is m x n, B is n x p, C is m x p.
+__global__ void matmul(float* A, float* B, float* C, uint32_t m, uint32_t n, uint32_t p) {
+    uint32_t row = blockIdx.y * blockDim.y + threadIdx.y;
+    uint32_t col = blockIdx.x * blockDim.x + threadIdx.x;
 
-#define THREADS_PER_BLOCK 64
-
-// Error handling for CUDA functions.
-#define TRY_CUDA(cuda_function)                                                                    \
-    {                                                                                              \
-        cudaError_t res = cuda_function;                                                           \
-        if (res != cudaSuccess) {                                                                  \
-            std::cerr << "CUDA Error: " << cudaGetErrorString(res) << " @ " << __FILE__ << " ("    \
-                      << __LINE__ << ")" << std::endl;                                             \
-            abort();                                                                               \
-        }                                                                                          \
+    if (row < m && col < p) {
+        float sum = 0;
+        for (uint32_t i = 0; i < n; i++) {
+            sum += A[row * n + i] * B[i * p + col];
+        }
+        C[row * p + col] = sum;
     }
+}
 
-// GPU kernel for backpropagation.
-__global__ void train_batch(size_t weight_layers, Eigen::Map<Eigen::MatrixXf>* weights,
-                            Eigen::Map<Eigen::MatrixXf>* weight_mods,
-                            Eigen::Map<Eigen::VectorXf>* a, Eigen::Map<Eigen::VectorXf>* z,
-                            Eigen::Map<Eigen::VectorXf>* deltas, float** samples, uint32_t** labels,
-                            size_t start_pos, size_t batch_size, float eta, float eta_bias) {
-    // New batch, set weight mods to zero.
-    for (size_t i = 0; i < weight_layers; i++) {
-        weight_mods[i].setZero();
-    }
+void NetEngine::test_func() {
+    std::cout << "test_func\n";
 
-    // Get weight mods for batch.
-    for (size_t i = start_pos; i < start_pos + batch_size; i++) {
-        // Wrap sample in Eigen vector.
-        Eigen::Map<Eigen::VectorXf> sample_eigen(samples[i], weight_mods[0].cols() - 1);
+    float A[6]{1, 2, 3, 4, 5, 6};
+    uint32_t A_rows = 2;
+    uint32_t A_cols = 3;
 
-        // Run first layer. Last column is bias.
-        z[0] = weights[0].leftCols(weights[0].cols() - 1) * sample_eigen +
-               weights[0].col(weights[0].cols() - 1);
+    float B[6]{7, 8, 9, 10, 11, 12};
+    uint32_t B_rows = 3;
+    uint32_t B_cols = 2;
 
-        a[0] = z[0].unaryExpr([](float x) { return 0.5f + 0.5f * x / (1.0f + fabsf(x)); });
+    float C[4];
+    uint32_t C_rows = 2;
+    uint32_t C_cols = 2;
 
-        // Run remaining layers.
-        for (size_t j = 1; j < weight_layers; j++) {
-            z[j] = weights[j].leftCols(weights[j].cols() - 1) * a[j - 1] +
-                   weights[j].col(weights[j].cols() - 1);
+    // Compute C = A * B on GPU.
+    float* device_A;
+    TRY_CUDA(cudaMalloc(&device_A, A_rows * A_cols * sizeof(float)));
+    TRY_CUDA(cudaMemcpy(device_A, A, A_rows * A_cols * sizeof(float), cudaMemcpyHostToDevice));
 
-            a[j] = z[j].unaryExpr([](float x) { return 0.5f + 0.5f * x / (1.0f + fabsf(x)); });
+    float* device_B;
+    TRY_CUDA(cudaMalloc(&device_B, B_rows * B_cols * sizeof(float)));
+    TRY_CUDA(cudaMemcpy(device_B, B, B_rows * B_cols * sizeof(float), cudaMemcpyHostToDevice));
+
+    float* device_C;
+    TRY_CUDA(cudaMalloc(&device_C, C_rows * C_cols * sizeof(float)));
+
+    dim3 threadsPerBlock(16, 16);
+    dim3 numBlocks((C_cols + threadsPerBlock.x - 1) / threadsPerBlock.x,
+                   (C_rows + threadsPerBlock.y - 1) / threadsPerBlock.y);
+
+    matmul<<<numBlocks, threadsPerBlock>>>(device_A, device_B, device_C, A_rows, A_cols, B_cols);
+
+    TRY_CUDA(cudaMemcpy(C, device_C, C_rows * C_cols * sizeof(float), cudaMemcpyDeviceToHost));
+    TRY_CUDA(cudaFree(device_A));
+    TRY_CUDA(cudaFree(device_B));
+    TRY_CUDA(cudaFree(device_C));
+
+    // Print result.
+    for (size_t i = 0; i < C_rows; i++) {
+        for (size_t j = 0; j < C_cols; j++) {
+            std::cout << C[i * C_cols + j] << ' ';
         }
-
-        // Get delta of last layer. Get loss by comparing activation with label, then take
-        // hadamard product with first derivative of sigmoid of weighted input.
-        for (size_t j = 0; j < deltas[weight_layers - 1].size(); j++) {
-            deltas[weight_layers - 1][j] = (a[weight_layers - 1][j] - labels[i][j]) /
-                                           (1.0f + powf(fabsf(z[weight_layers - 1][j]), 2.0f));
-        }
-
-        // Get delta of remaining layers. Backpropagate delta of following layer, then take
-        // hadamard product with first derivative of sigmoid of weighted input.
-        for (size_t j = weight_layers - 1; j >= 1; j--) {
-            deltas[j - 1] = (weights[j].leftCols(weights[j].cols() - 1).transpose() * deltas[j])
-                                .cwiseProduct(z[j - 1].unaryExpr(
-                                    [](float x) { return 1.0f / (1.0f + powf(fabsf(x), 2.0f)); }));
-        }
-
-        // Compute weight modification.
-        weight_mods[0].leftCols(weight_mods[0].cols() - 1) -=
-            eta * deltas[0] * sample_eigen.transpose();
-
-        weight_mods[0].col(weight_mods[0].cols() - 1) -= eta_bias * deltas[0];
-
-        for (size_t j = 1; j < weight_layers; j++) {
-            weight_mods[j].leftCols(weight_mods[j].cols() - 1) -=
-                eta * deltas[j] * a[j - 1].transpose();
-
-            weight_mods[j].col(weight_mods[j].cols() - 1) -= eta_bias * deltas[j];
-        }
-    }
-
-    // Apply weight mods.
-    for (size_t i = 0; i < weight_layers; i++) {
-        weights[i] += weight_mods[i] / (float)batch_size;
+        std::cout << '\n';
     }
 }
 

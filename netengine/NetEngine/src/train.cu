@@ -1,78 +1,81 @@
-#include <cassert>
-#include <iostream>
-
 #include "DevTools.h"
 #include "Exceptions.h"
 #include "Net.h"
 
-// CUDA kernel for matrix multiplication.
-// A is m x n, B is n x p, C is m x p.
-__global__ void matmul(float* A, float* B, float* C, uint32_t m, uint32_t n, uint32_t p) {
-    uint32_t row = blockIdx.y * blockDim.y + threadIdx.y;
-    uint32_t col = blockIdx.x * blockDim.x + threadIdx.x;
+// CUDA kernel to feed forward one layer and also store the weighted input.
+// input is m x 1, weights is n x (m + 1) (for bias), a and z are n x 1.
+__global__ void feed_forward_training(float* input, float* weights, float* a, float* z, uint32_t m,
+                                      uint32_t n) {
+    uint32_t row = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (row < m && col < p) {
-        float sum = 0;
-        for (uint32_t i = 0; i < n; i++) {
-            sum += A[row * n + i] * B[i * p + col];
-        }
-        C[row * p + col] = sum;
+    if (row < n) {
+        // Note: last column is bias.
+        float sum = weights[row * (m + 1) + m];
+        for (uint32_t col = 0; col < m - 1; col++)
+            sum += input[col] * weights[row * (m + 1) + col];
+
+        // Store the weighted input.
+        z[row] = sum;
+
+        // Apply sigmoid function.
+        a[row] = 0.5f + 0.5f * sum / (1.0f + fabsf(sum));
     }
 }
 
-void NetEngine::test_func() {
-    std::cout << "test_func\n";
+// CUDA kernel to calculate the deltas for the output layer.
+// n is the size of the output layer.
+__global__ void calc_deltas_output(uint32_t* label, float* a, float* z, float* deltas, uint32_t n) {
+    uint32_t row = blockIdx.x * blockDim.x + threadIdx.x;
 
-    float A[6]{1, 2, 3, 4, 5, 6};
-    uint32_t A_rows = 2;
-    uint32_t A_cols = 3;
+    if (row < n) {
+        // Get loss by comparing activation with label, then take hadamard product with
+        // first derivative of sigmoid of weighted input.
+        deltas[row] = (a[row] - (float)label[row]) / (1.0f + powf(fabsf(z[row]), 2));
+    }
+}
 
-    float B[6]{7, 8, 9, 10, 11, 12};
-    uint32_t B_rows = 3;
-    uint32_t B_cols = 2;
+// CUDA kernel to calculate the deltas for first and hidden layers.
+// n x m is the size of weights_next.
+__global__ void calc_deltas(float* deltas, float* deltas_next, float* weights_next, float* z,
+                            uint32_t n, uint32_t m) {
+    uint32_t row = blockIdx.x * blockDim.x + threadIdx.x;
 
-    float C[4];
-    uint32_t C_rows = 2;
-    uint32_t C_cols = 2;
+    if (row < n) {
+        // Backpropagate delta of following layer.
+        float sum = 0;
+        for (uint32_t i = 0; i < n; i++)
+            // Note: row is the row of deltas, and therefore the column of weights_next.
+            // We are calculating transpose(weights_next) * deltas_next.
+            sum += deltas_next[i] * weights_next[(i * m) + row];
 
-    // Compute C = A * B on GPU.
-    float* device_A;
-    TRY_CUDA(cudaMalloc(&device_A, A_rows * A_cols * sizeof(float)));
-    TRY_CUDA(cudaMemcpy(device_A, A, A_rows * A_cols * sizeof(float), cudaMemcpyHostToDevice));
+        // Take hadamard product with first derivative of sigmoid of weighted input.
+        deltas[row] = sum / (1.0f + powf(fabsf(z[row]), 2));
+    }
+}
 
-    float* device_B;
-    TRY_CUDA(cudaMalloc(&device_B, B_rows * B_cols * sizeof(float)));
-    TRY_CUDA(cudaMemcpy(device_B, B, B_rows * B_cols * sizeof(float), cudaMemcpyHostToDevice));
+// CUDA kernel to update the weights.
+// n x m is the size of weights.
+__global__ void update_weights(float* weights, float* deltas, float* a, float eta, float eta_bias,
+                               uint32_t n, uint32_t m) {
+    uint32_t row = blockIdx.x * blockDim.x + threadIdx.x;
+    uint32_t col = blockIdx.y * blockDim.y + threadIdx.y;
 
-    float* device_C;
-    TRY_CUDA(cudaMalloc(&device_C, C_rows * C_cols * sizeof(float)));
-
-    dim3 threadsPerBlock(16, 16);
-    dim3 numBlocks((C_cols + threadsPerBlock.x - 1) / threadsPerBlock.x,
-                   (C_rows + threadsPerBlock.y - 1) / threadsPerBlock.y);
-
-    matmul<<<numBlocks, threadsPerBlock>>>(device_A, device_B, device_C, A_rows, A_cols, B_cols);
-
-    TRY_CUDA(cudaMemcpy(C, device_C, C_rows * C_cols * sizeof(float), cudaMemcpyDeviceToHost));
-    TRY_CUDA(cudaFree(device_A));
-    TRY_CUDA(cudaFree(device_B));
-    TRY_CUDA(cudaFree(device_C));
-
-    // Print result.
-    for (size_t i = 0; i < C_rows; i++) {
-        for (size_t j = 0; j < C_cols; j++) {
-            std::cout << C[i * C_cols + j] << ' ';
-        }
-        std::cout << '\n';
+    if (row < n && col < m - 1) {
+        // Update weight.
+        weights[(row * m) + col] -= eta * deltas[row] * a[col];
+    } else if (row < n && col == m - 1) {
+        // Update bias.
+        weights[(row * m) + col] -= eta_bias * deltas[row];
     }
 }
 
 //--------------------------------------------------------------------------------------------------
-// Train the net.
-void NetEngine::Net::train(const std::vector<std::vector<float>>& samples,
-                           const std::vector<std::vector<uint32_t>>& labels, size_t n_batches,
-                           size_t batch_size, size_t start_pos) {
-    // check for bad inputs
+// Train the network using backpropagation.
+//--------------------------------------------------------------------------------------------------
+size_t NetEngine::Net::train(const std::vector<std::vector<float>>& samples,
+                             const std::vector<std::vector<uint32_t>>& labels, size_t n_samples,
+                             size_t start_pos) {
+    // Check for bad inputs.
     if (samples[0].size() != m_layout.front())
         throw NetEngine::DimensionError(samples[0].size(), m_layout.front());
 
@@ -82,147 +85,102 @@ void NetEngine::Net::train(const std::vector<std::vector<float>>& samples,
     if (samples.size() != labels.size())
         throw NetEngine::SetSizeError(samples.size(), labels.size());
 
-    if (batch_size > samples.size())
-        throw NetEngine::BatchesTooLarge(batch_size, samples.size());
-
-    if (start_pos + batch_size > samples.size())
+    if (start_pos >= samples.size())
         start_pos = 0;
+
+    // Allocate device memory for sample and label.
+    float* d_sample;
+    uint32_t* d_label;
+    cudaMalloc(&d_sample, sizeof(float) * m_layout.front());
+    cudaMalloc(&d_label, sizeof(uint32_t) * m_layout.back());
+
+    // Allocate device memory for activation values and deltas.
+    float* z[m_weights.size()];
+    float* a[m_weights.size()];
+    float* deltas[m_weights.size()];
+    for (size_t i = 0; i < m_weights.size(); i++) {
+        cudaMalloc(&z[i], sizeof(float) * m_layout[i + 1]);
+        cudaMalloc(&a[i], sizeof(float) * m_layout[i + 1]);
+        cudaMalloc(&deltas[i], sizeof(float) * m_layout[i + 1]);
+    }
 
     // Position in samples and labels.
     size_t pos = start_pos;
 
-    // Copy samples, labels and weights to device.
-    float** device_samples;
-    TRY_CUDA(cudaMallocManaged(&device_samples, samples.size() * sizeof(float*)));
+    // Iterate samples.
+    for (size_t s = 0; s < n_samples; s++) {
+        // Copy sample and label to device.
+        cudaMemcpy(d_sample, samples[pos].data(), sizeof(float) * m_layout.front(),
+                   cudaMemcpyHostToDevice);
+        cudaMemcpy(d_label, labels[pos].data(), sizeof(uint32_t) * m_layout.back(),
+                   cudaMemcpyHostToDevice);
 
-    uint32_t** device_labels;
-    TRY_CUDA(cudaMallocManaged(&device_labels, labels.size() * sizeof(uint32_t*)));
+        // Feed forward first layer.
+        size_t threads_per_block = BLOCK_SIZE * BLOCK_SIZE;
+        size_t n_blocks = (m_weights[0].rows + threads_per_block - 1) / threads_per_block;
+        feed_forward_training<<<n_blocks, threads_per_block>>>(
+            d_sample, m_weights[0].data, a[0], z[0], m_weights[0].cols - 1, m_weights[0].rows);
 
-    for (size_t i = 0; i < samples.size(); i++) {
-        float* sample;
-        TRY_CUDA(cudaMalloc(&sample, samples[i].size() * sizeof(float)));
-        TRY_CUDA(cudaMemcpy(sample, samples[i].data(), samples[i].size() * sizeof(float),
-                            cudaMemcpyHostToDevice));
-        device_samples[i] = sample;
+        // Feed forward remaining layers.
+        for (size_t i = 1; i < m_weights.size(); i++) {
+            n_blocks = (m_weights[i].rows + threads_per_block - 1) / threads_per_block;
+            feed_forward_training<<<n_blocks, threads_per_block>>>(
+                a[i - 1], m_weights[i].data, a[i], z[i], m_weights[i].cols - 1, m_weights[i].rows);
+        }
 
-        uint32_t* label;
-        TRY_CUDA(cudaMalloc(&label, labels[i].size() * sizeof(uint32_t)));
-        TRY_CUDA(cudaMemcpy(label, labels[i].data(), labels[i].size() * sizeof(uint32_t),
-                            cudaMemcpyHostToDevice));
-        device_labels[i] = label;
-    }
-
-    Eigen::Map<Eigen::MatrixXf>* device_weights;
-    TRY_CUDA(
-        cudaMallocManaged(&device_weights, m_weights.size() * sizeof(Eigen::Map<Eigen::MatrixXf>)));
-
-    for (size_t i = 0; i < m_weights.size(); i++) {
-        float* weights;
-        TRY_CUDA(cudaMalloc(&weights, m_weights[i].size() * sizeof(float)));
-        TRY_CUDA(cudaMemcpy(weights, m_weights[i].data(), m_weights[i].size() * sizeof(float),
-                            cudaMemcpyHostToDevice));
-        new (&device_weights[i])
-            Eigen::Map<Eigen::MatrixXf>(weights, m_weights[i].rows(), m_weights[i].cols());
-    }
-
-    // Determine CUDA grid dimensions.
-    // Get number of multiprocessors, use it as number of blocks.
-    int device;
-    cudaGetDevice(&device);
-    struct cudaDeviceProp props;
-    cudaGetDeviceProperties(&props, device);
-    int n_blocks = props.multiProcessorCount;
-    int n_threads = n_blocks * THREADS_PER_BLOCK;
-    int samples_per_thread = batch_size / n_threads ? batch_size / n_threads : 1;
-    int real_batch_size = n_threads * samples_per_thread;
-    LOG(real_batch_size)
-
-    // Initialize temporary storage on device, because allocating inside the kernel
-    // is not recommended.
-
-    // Each block needs a weight_mods instance.
-    Eigen::Map<Eigen::MatrixXf>* device_weight_mods;
-    TRY_CUDA(cudaMallocManaged(&device_weight_mods,
-                               m_weights.size() * sizeof(Eigen::Map<Eigen::MatrixXf>)));
-
-    Eigen::Map<Eigen::VectorXf>* device_a;
-    TRY_CUDA(cudaMallocManaged(&device_a, m_weights.size() * sizeof(Eigen::Map<Eigen::VectorXf>)));
-
-    Eigen::Map<Eigen::VectorXf>* device_z;
-    TRY_CUDA(cudaMallocManaged(&device_z, m_weights.size() * sizeof(Eigen::Map<Eigen::VectorXf>)));
-
-    Eigen::Map<Eigen::VectorXf>* device_deltas;
-    TRY_CUDA(
-        cudaMallocManaged(&device_deltas, m_weights.size() * sizeof(Eigen::Map<Eigen::VectorXf>)));
-
-    for (size_t i = 0; i < m_weights.size(); i++) {
-        float* weights;
-        TRY_CUDA(cudaMalloc(&weights, m_weights[i].size() * sizeof(float)));
-        TRY_CUDA(cudaMemcpy(weights, m_weights[i].data(), m_weights[i].size() * sizeof(float),
-                            cudaMemcpyHostToDevice));
-        new (&device_weights[i])
-            Eigen::Map<Eigen::MatrixXf>(weights, m_weights[i].rows(), m_weights[i].cols());
-
-        float* mods;
-        TRY_CUDA(cudaMalloc(&mods, m_weights[i].size() * sizeof(float)));
-        new (&device_weight_mods[i])
-            Eigen::Map<Eigen::MatrixXf>(mods, m_weights[i].rows(), m_weights[i].cols());
-
-        float* a;
-        TRY_CUDA(cudaMalloc(&a, m_layout[i + 1] * sizeof(float)));
-        new (&device_a[i]) Eigen::Map<Eigen::VectorXf>(a, m_layout[i + 1]);
-
-        float* z;
-        TRY_CUDA(cudaMalloc(&z, m_layout[i + 1] * sizeof(float)));
-        new (&device_z[i]) Eigen::Map<Eigen::VectorXf>(z, m_layout[i + 1]);
-
-        float* deltas;
-        TRY_CUDA(cudaMalloc(&deltas, m_layout[i + 1] * sizeof(float)));
-        new (&device_deltas[i]) Eigen::Map<Eigen::VectorXf>(deltas, m_layout[i + 1]);
-    }
-
-    // Train net in batches.
-    for (size_t batch = 0; batch < n_batches; batch++) {
-        std::cout << "batch " << batch + 1 << ", pos = " << pos << '\n';
-
-        // Train batch on GPU.
-        train_batch<<<n_blocks, THREADS_PER_BLOCK>>>(
-            m_weights.size(), device_weights, device_weight_mods, device_a, device_z, device_deltas,
-            device_samples, device_labels, pos, real_batch_size, m_eta, m_eta_bias);
+        // Calculate deltas for output layer.
+        n_blocks = (m_layout.back() + threads_per_block - 1) / threads_per_block;
+        calc_deltas_output<<<n_blocks, threads_per_block>>>(
+            d_label, a[m_weights.size() - 1], z[m_weights.size() - 1], deltas[m_weights.size() - 1],
+            m_layout.back());
 
         TRY_CUDA(cudaDeviceSynchronize());
 
-        pos += real_batch_size;
+        // Calculate deltas for remaining layers.
+        for (size_t i = m_weights.size() - 1; i > 0; i--) {
+            n_blocks = (m_layout[i - 1] + threads_per_block - 1) / threads_per_block;
+            calc_deltas<<<n_blocks, threads_per_block>>>(deltas[i - 1], deltas[i],
+                                                         m_weights[i].data, z[i - 1],
+                                                         m_weights[i].rows, m_weights[i].cols);
 
-        // Wrap around to beginning of training data if necessary.
-        if (pos == samples.size())
-            pos = 0;
-    }
+            TRY_CUDA(cudaDeviceSynchronize());
+        }
 
-    // Retrieve weights from device and free memory.
-    for (size_t i = 0; i < m_weights.size(); i++) {
-        TRY_CUDA(cudaMemcpy(m_weights[i].data(), device_weights[i].data(),
-                            m_weights[i].size() * sizeof(float), cudaMemcpyDeviceToHost));
+        // Update weights of input layer.
+        dim3 threads_per_block_2d(BLOCK_SIZE, BLOCK_SIZE);
+        dim3 n_blocks_2d((m_weights[0].rows + threads_per_block_2d.x - 1) / threads_per_block_2d.x,
+                         (m_weights[0].cols + threads_per_block_2d.y - 1) / threads_per_block_2d.y);
+
+        update_weights<<<n_blocks_2d, threads_per_block_2d>>>(m_weights[0].data, deltas[0],
+                                                              d_sample, m_eta, m_eta_bias,
+                                                              m_weights[0].rows, m_weights[0].cols);
 
         TRY_CUDA(cudaDeviceSynchronize());
 
-        TRY_CUDA(cudaFree(device_weights[i].data()));
-        TRY_CUDA(cudaFree(device_weight_mods[i].data()));
-        TRY_CUDA(cudaFree(device_a[i].data()));
-        TRY_CUDA(cudaFree(device_z[i].data()));
-        TRY_CUDA(cudaFree(device_deltas[i].data()));
+        // Update weights of remaining layers.
+        for (size_t i = 1; i < m_weights.size(); i++) {
+            n_blocks_2d =
+                dim3((m_weights[i].rows + threads_per_block_2d.x - 1) / threads_per_block_2d.x,
+                     (m_weights[i].cols + threads_per_block_2d.y - 1) / threads_per_block_2d.y);
+
+            update_weights<<<n_blocks_2d, threads_per_block_2d>>>(
+                m_weights[i].data, deltas[i], a[i - 1], m_eta, m_eta_bias, m_weights[i].rows,
+                m_weights[i].cols);
+
+            TRY_CUDA(cudaDeviceSynchronize());
+        }
+
+        pos = (pos + 1) % samples.size();
     }
 
-    for (size_t i = 0; i < samples.size(); i++) {
-        TRY_CUDA(cudaFree(device_samples[i]));
-        TRY_CUDA(cudaFree(device_labels[i]));
+    // Free device memory.
+    cudaFree(d_sample);
+    cudaFree(d_label);
+    for (size_t i = 0; i < m_weights.size(); i++) {
+        cudaFree(z[i]);
+        cudaFree(a[i]);
+        cudaFree(deltas[i]);
     }
 
-    TRY_CUDA(cudaFree(device_samples));
-    TRY_CUDA(cudaFree(device_labels));
-    TRY_CUDA(cudaFree(device_weights));
-    TRY_CUDA(cudaFree(device_a));
-    TRY_CUDA(cudaFree(device_z));
-    TRY_CUDA(cudaFree(device_deltas));
-    TRY_CUDA(cudaFree(device_weight_mods));
+    return pos;
 }

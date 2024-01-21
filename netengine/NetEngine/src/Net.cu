@@ -5,27 +5,43 @@
 #include "Exceptions.h"
 #include "Net.h"
 
+// CUDA kernel to set one float value in device memory.
+__global__ void set_value(float* data, float value) {
+    *data = value;
+}
+
 //--------------------------------------------------------------------------------------------------
 // Constructor
 //--------------------------------------------------------------------------------------------------
-NetEngine::Net::Net(const std::vector<size_t>& layout, float eta, float eta_bias)
+NetEngine::Net::Net(const std::vector<uint32_t>& layout, float eta, float eta_bias)
     : m_layout(layout), m_eta(eta), m_eta_bias(eta_bias) {
     // Check minimum number of layers.
     if (layout.size() < 3)
         throw NetEngine::NotEnoughLayers(layout.size());
 
+    // Seed random number generator to get new random numbers each time.
+    std::srand((unsigned)std::time(0));
+
     // Initialize weight matrices, add one column for bias.
     for (size_t i = 0; i < layout.size() - 1; i++) {
-        size_t rows = layout[i + 1];
-        size_t cols = layout[i] + 1;
         float* weights;
+        uint32_t rows = layout[i + 1];
+        uint32_t cols = layout[i] + 1;
 
-        TRY_CUDA(cudaMallocManaged(&weights, rows * cols * sizeof(float)));
+        TRY_CUDA(cudaMalloc(&weights, rows * cols * sizeof(float)));
 
-        m_weights.push_back({rows, cols, weights});
+        // Set weight matrix to random values in range [+- 1/sqrt(number of neurons in layer)].
+        for (uint32_t r = 0; r < rows; r++)
+            for (uint32_t c = 0; c < cols; c++)
+                set_value<<<1, 1>>>(&weights[r * cols + c],
+                                    (((float)std::rand() / RAND_MAX) * 2.0f - 1.0f) /
+                                        sqrt(cols - 1));
+
+        TRY_CUDA(cudaDeviceSynchronize());
+
+        CudaMatrix cuda_matrix = {weights, rows, cols};
+        m_weights.push_back(cuda_matrix);
     }
-
-    set_random();
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -76,23 +92,8 @@ std::string NetEngine::Net::info_string() {
 //--------------------------------------------------------------------------------------------------
 size_t NetEngine::Net::n_parameters() {
     size_t n = 0;
-    for (const auto& i : m_weights)
+    for (auto& i : m_weights)
         n += i.rows * i.cols;
 
     return n;
-}
-
-//--------------------------------------------------------------------------------------------------
-// Set weights to random values.
-//--------------------------------------------------------------------------------------------------
-void NetEngine::Net::set_random() {
-    // seed random number generator to get new random numbers each time
-    std::srand((unsigned)std::time(0));
-
-    // set weight matrix to random values in range [+- 1/sqrt(number of neurons in layer)]
-    for (auto& i : m_weights)
-        for r in i.rows
-            for c in i.cols
-                i[r * i.cols + c] = 
-                    (((float)std::rand() / RAND_MAX)* 2.0f - 1.0f) / sqrt(i.cols - 1);
 }

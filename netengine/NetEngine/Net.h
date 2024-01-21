@@ -1,6 +1,8 @@
 #ifndef NETENGINE_NET_H
 #define NETENGINE_NET_H
 
+#include <cassert>
+#include <iostream>
 #include <thread>
 #include <vector>
 
@@ -23,7 +25,7 @@ namespace NetEngine {
         float* data;
         uint32_t rows;
         uint32_t cols;
-    }
+    };
 
     class Net {
     private:
@@ -32,11 +34,11 @@ namespace NetEngine {
         float m_eta;
         float m_eta_bias;
 
-        // Run one sample on the net. Internal function, expects pointers to CUDA unified memory.
-        void run_cuda(const float* sample, float** results);
+        // Run one sample on the net. Internal function, expects pointers to device memory.
+        void run_cuda(float* sample, float** results);
 
     public:
-        Net(const std::vector<size_t>& layout, float eta, float eta_bias);
+        Net(const std::vector<uint32_t>& layout, float eta, float eta_bias);
         ~Net();
 
         float get_eta();
@@ -46,20 +48,18 @@ namespace NetEngine {
 
         std::string info_string();
         size_t n_parameters();
-        void set_random();
 
         // Run one sample on the net.
         std::vector<float> run(const std::vector<float>& sample);
 
-        // Train net.
-        void train(const std::vector<std::vector<float>>& samples,
-                   const std::vector<std::vector<uint32_t>>& labels, size_t n_batches,
-                   size_t batch_size, size_t start_pos = 0);
+        // Train net. Returns last position in samples.
+        size_t train(const std::vector<std::vector<float>>& samples,
+                     const std::vector<std::vector<uint32_t>>& labels, size_t n_samples,
+                     size_t start_pos = 0);
 
         // Test accuracy.
         float test(const std::vector<std::vector<float>>& samples,
-                   const std::vector<std::vector<uint32_t>>& labels, float subset = 100.0f,
-                   float threshold = NAN);
+                   const std::vector<std::vector<uint32_t>>& labels);
     };
 }
 

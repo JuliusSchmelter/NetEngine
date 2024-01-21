@@ -14,23 +14,14 @@
 
 #define ETA 0.1
 #define ETA_BIAS 0.02
-#define MINI_BATCHES 8
-#define MINI_BATCH_SIZE 256
+#define BATCH_SIZE 20000
 
-int main() {
-    NetEngine::test_func();
-
-    return 0;
-}
-
-/*
 int main() {
     TIMER(main)
 
     // init net
     NetEngine::Net net(LAYOUT, ETA, ETA_BIAS);
     LOG(net.n_parameters())
-    net.set_random();
 
     // define targets
     std::vector<std::vector<uint32_t>> target = {
@@ -97,16 +88,21 @@ int main() {
     ifstream.close();
     TOC(load_data)
 
+    std::cout << std::endl;
+
     // train and test
-    for (size_t trained = 0;; trained += MINI_BATCHES * MINI_BATCH_SIZE) {
-        LOG(trained)
-        TIC(train);
-        net.train(train_images, train_labels, MINI_BATCHES, MINI_BATCH_SIZE, trained % N_TRAIN);
+    size_t pos = 0;
+    for (size_t trained = 0;; trained += BATCH_SIZE) {
+        TIC(train)
+        pos = net.train(train_images, train_labels, BATCH_SIZE, pos);
         TOC(train)
 
         TIC(test)
         std::cout << "accuracy: " << 100 * net.test(test_images, test_labels) << "%\n";
         TOC(test)
+
+        LOG(trained)
+        LOG(pos)
+        std::cout << std::endl;
     }
 }
-*/

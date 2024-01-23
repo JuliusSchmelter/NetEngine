@@ -2,7 +2,7 @@
 #define NETENGINE_CUDA_H
 
 // CUDA block size.
-#define BLOCK_SIZE 16
+#define BLOCK_SIZE 8
 
 // Error handling for CUDA functions.
 #define TRY_CUDA(cuda_function)                                                                    \

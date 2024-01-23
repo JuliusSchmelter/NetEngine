@@ -8,23 +8,17 @@ using namespace py::literals;
 
 PYBIND11_MODULE(netengine, m) {
     py::class_<NetEngine::Net>(m, "Net")
-        .def(py::init<const std::vector<size_t>&, float, float>())
+        .def(py::init<const std::vector<uint32_t>&, float, float, bool>(), "layout"_a, "eta"_a,
+             "eta_bias"_a, "try_cuda"_a = true)
         .def("get_eta", &NetEngine::Net::get_eta)
         .def("set_eta", &NetEngine::Net::set_eta)
         .def("get_eta_bias", &NetEngine::Net::get_eta_bias)
         .def("set_eta_bias", &NetEngine::Net::set_eta_bias)
+        .def("cuda_enabled", &NetEngine::Net::cuda_enabled)
         .def("__str__", &NetEngine::Net::info_string)
         .def("n_parameters", &NetEngine::Net::n_parameters)
-        .def("set_random", &NetEngine::Net::set_random)
         .def("run", &NetEngine::Net::run)
-        .def("train", py::overload_cast<const std::vector<float>&, const std::vector<uint8_t>&>(
-                          &NetEngine::Net::train))
-        .def("train",
-             py::overload_cast<const std::vector<std::vector<float>>&,
-                               const std::vector<std::vector<uint8_t>>&, size_t, size_t, size_t,
-                               size_t>(&NetEngine::Net::train),
-             "samples"_a, "labels"_a, "n_batches"_a, "batch_size"_a, "start_pos"_a = 0,
-             "n_threads"_a = std::thread::hardware_concurrency())
-        .def("test", &NetEngine::Net::test, "samples"_a, "labels"_a, "subset"_a = 100.0f,
-             "threshold"_a = NAN, "n_threads"_a = std::thread::hardware_concurrency());
+        .def("train", &NetEngine::Net::train, "samples"_a, "labels"_a, "n_samples"_a,
+             "start_pos"_a = 0)
+        .def("test", &NetEngine::Net::test);
 }

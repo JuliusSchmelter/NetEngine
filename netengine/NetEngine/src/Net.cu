@@ -1,13 +1,23 @@
 #include <cassert>
+#include <curand_kernel.h>
 #include <iomanip>
 #include <iostream>
 
 #include "Exceptions.h"
 #include "Net.h"
 
-// CUDA kernel to set one float value in device memory.
-__global__ void set_value(float* data, float value) {
-    *data = value;
+// CUDA kernel to set random float values in device memory.
+// Target matrix is m x n.
+__global__ void set_random(float* data, uint32_t m, uint32_t n, size_t seed, float range) {
+    uint32_t row = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Initialize random number generator.
+    curandState curand_state;
+    curand_init(seed, row, 0, &curand_state);
+
+    if (row < m)
+        for (uint32_t col = 0; col < n; col++)
+            data[row * n + col] = (curand_uniform(&curand_state) * 2.0f - 1.0f) * range;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -36,11 +46,10 @@ NetEngine::Net::Net(const std::vector<uint32_t>& layout, float eta, float eta_bi
             TRY_CUDA(cudaMalloc(&weights, rows * cols * sizeof(float)));
 
             // Set weight matrix to random values in range [+- 1/sqrt(number of neurons in layer)].
-            for (uint32_t r = 0; r < rows; r++)
-                for (uint32_t c = 0; c < cols; c++)
-                    set_value<<<1, 1>>>(&weights[r * cols + c],
-                                        (((float)std::rand() / RAND_MAX) * 2.0f - 1.0f) /
-                                            sqrt(cols - 1));
+            size_t threads_per_block = BLOCK_SIZE;
+            size_t n_blocks = (rows + threads_per_block - 1) / threads_per_block;
+            set_random<<<n_blocks, threads_per_block>>>(weights, rows, cols, i,
+                                                        1.0f / sqrt(cols - 1));
 
             TRY_CUDA(cudaDeviceSynchronize());
 

@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 # Enable warnings, optimizations and position-independent code for dynamic linking.
-add_compile_options(-Wall -Wextra -pedantic -Werror -O3 -fPIC)
+add_compile_options(-Wall -Wextra -pedantic -O3 -fPIC)
 
 # Build Python module using pybind11.
 add_subdirectory(pybind11)

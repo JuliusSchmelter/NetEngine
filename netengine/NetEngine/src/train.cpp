@@ -5,8 +5,7 @@
 #include "Exceptions.h"
 #include "Net.h"
 
-// Mini batch size.
-#define MINI_BATCH_SIZE 128
+#define MINI_BATCH_SIZE 32
 
 //--------------------------------------------------------------------------------------------------
 // Train the net.

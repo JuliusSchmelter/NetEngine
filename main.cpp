@@ -6,25 +6,26 @@
 #include <iostream>
 #include <vector>
 
-#define N_TEST 10000
+#define N_TEST 1000
 #define N_TRAIN 60000
 
 #define LAYOUT                                                                                     \
-    { 28 * 28, 100, 10 }
+    { 28 * 28, 500, 200, 10 }
 
 #define ETA 0.1
 #define ETA_BIAS 0.02
-#define BATCH_SIZE 20000
+#define BATCH_SIZE 5000
 
 int main() {
     TIMER(main)
 
     // init net
-    NetEngine::Net net(LAYOUT, ETA, ETA_BIAS);
+    NetEngine::Net net(LAYOUT, ETA, ETA_BIAS, false);
     LOG(net.n_parameters())
+    LOG(net.cuda_enabled())
 
     // define targets
-    std::vector<std::vector<uint32_t>> target = {
+    std::vector<std::vector<uint8_t>> target = {
         {1, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 1, 0, 0, 0, 0, 0, 0, 0, 0},
         {0, 0, 1, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 1, 0, 0, 0, 0, 0, 0},
         {0, 0, 0, 0, 1, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 1, 0, 0, 0, 0},
@@ -33,9 +34,9 @@ int main() {
 
     // get storage
     std::vector<std::vector<float>> test_images(N_TEST);
-    std::vector<std::vector<uint32_t>> test_labels(N_TEST);
+    std::vector<std::vector<uint8_t>> test_labels(N_TEST);
     std::vector<std::vector<float>> train_images(N_TRAIN);
-    std::vector<std::vector<uint32_t>> train_labels(N_TRAIN);
+    std::vector<std::vector<uint8_t>> train_labels(N_TRAIN);
 
     // load test data
     TIC(load_data)

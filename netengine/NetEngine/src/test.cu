@@ -9,16 +9,16 @@
 //--------------------------------------------------------------------------------------------------
 // Test accuracy.
 //--------------------------------------------------------------------------------------------------
-float NetEngine::Net::test(const std::vector<std::vector<float>>& samples,
-                           const std::vector<std::vector<uint32_t>>& labels) {
+float NetEngine::Net::test_cuda(const std::vector<std::vector<float>>& samples,
+                                const std::vector<std::vector<uint8_t>>& labels) {
     // Check for bad inputs.
     if (samples.size() != labels.size())
         throw NetEngine::SetSizeError(samples.size(), labels.size());
 
     // Allocate device memory for (intermediate) results.
-    float* results_d[m_weights.size()];
-    for (size_t i = 0; i < m_weights.size(); i++) {
-        TRY_CUDA(cudaMalloc(&results_d[i], m_weights[i].rows * sizeof(float)));
+    float* results_d[m_weights_cuda.size()];
+    for (size_t i = 0; i < m_weights_cuda.size(); i++) {
+        TRY_CUDA(cudaMalloc(&results_d[i], m_weights_cuda[i].rows * sizeof(float)));
     }
 
     // Allocate device memory for sample.
@@ -36,15 +36,15 @@ float NetEngine::Net::test(const std::vector<std::vector<float>>& samples,
                             cudaMemcpyHostToDevice));
 
         // Run sample on network.
-        run_cuda(sample_d, results_d);
+        run_cuda_dev_ptrs(sample_d, results_d);
 
         // Copy output to host.
-        TRY_CUDA(cudaMemcpy(output.data(), results_d[m_weights.size() - 1],
+        TRY_CUDA(cudaMemcpy(output.data(), results_d[m_weights_cuda.size() - 1],
                             m_layout.back() * sizeof(float), cudaMemcpyDeviceToHost));
 
         // Check result.
-        uint8_t result = std::max_element(output.begin(), output.end()) - output.begin();
-        uint8_t label = std::max_element(labels[i].begin(), labels[i].end()) - labels[i].begin();
+        size_t result = std::max_element(output.begin(), output.end()) - output.begin();
+        size_t label = std::max_element(labels[i].begin(), labels[i].end()) - labels[i].begin();
 
         if (result == label)
             success++;
@@ -52,7 +52,7 @@ float NetEngine::Net::test(const std::vector<std::vector<float>>& samples,
 
     // Free memory.
     TRY_CUDA(cudaFree(sample_d));
-    for (size_t i = 0; i < m_weights.size(); i++) {
+    for (size_t i = 0; i < m_weights_cuda.size(); i++) {
         TRY_CUDA(cudaFree(results_d[i]));
     }
 

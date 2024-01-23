@@ -8,7 +8,7 @@
 #define LOG(var) std::cout << #var << " = " << var << std::endl;
 #define LOGS(string) std::cout << #string << std::endl;
 #define TIMER(name) NetEngine::Timer timer_##name(#name);
-#define TIC(name) NetEngine::Timer *timer_##name = new NetEngine::Timer(#name);
+#define TIC(name) NetEngine::Timer* timer_##name = new NetEngine::Timer(#name);
 #define TOC(name) delete timer_##name;
 
 namespace NetEngine {
@@ -22,7 +22,7 @@ namespace NetEngine {
             m_start = std::chrono::high_resolution_clock::now();
         }
 
-        Timer(const char *name) : m_name(name) {
+        Timer(const char* name) : m_name(name) {
             m_start = std::chrono::high_resolution_clock::now();
         }
 
@@ -36,20 +36,17 @@ namespace NetEngine {
 
             // less than 100 ms
             if (duration < std::chrono::duration<float>(0.1f))
-                std::cout << std::fixed << std::setprecision(2) << "[" << m_name
-                          << " scope lived " << duration.count() * 1000.0f
-                          << " ms]" << std::endl;
+                std::cout << std::fixed << std::setprecision(2) << "[" << m_name << " scope lived "
+                          << duration.count() * 1000.0f << " ms]" << std::endl;
 
             // less than 1 s
             else if (duration < std::chrono::duration<float>(1.0f))
-                std::cout << std::fixed << std::setprecision(0) << "[" << m_name
-                          << " scope lived " << duration.count() * 1000.0f
-                          << " ms]" << std::endl;
+                std::cout << std::fixed << std::setprecision(0) << "[" << m_name << " scope lived "
+                          << duration.count() * 1000.0f << " ms]" << std::endl;
             // more than 1 s
             else
-                std::cout << std::fixed << std::setprecision(2) << "[" << m_name
-                          << " scope lived " << duration.count() << " s]"
-                          << std::endl;
+                std::cout << std::fixed << std::setprecision(2) << "[" << m_name << " scope lived "
+                          << duration.count() << " s]" << std::endl;
 
             // restore stream format
             std::cout.copyfmt(streamfmt);
@@ -57,4 +54,4 @@ namespace NetEngine {
     };
 }
 
-#endif
+#endif // NETENGINE_DEVTOOLS_H

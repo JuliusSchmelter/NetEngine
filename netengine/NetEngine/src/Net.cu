@@ -13,7 +13,7 @@ __global__ void set_value(float* data, float value) {
 //--------------------------------------------------------------------------------------------------
 // Constructor
 //--------------------------------------------------------------------------------------------------
-NetEngine::Net::Net(const std::vector<uint32_t>& layout, float eta, float eta_bias)
+NetEngine::Net::Net(const std::vector<uint32_t>& layout, float eta, float eta_bias, bool try_cuda)
     : m_layout(layout), m_eta(eta), m_eta_bias(eta_bias) {
     // Check minimum number of layers.
     if (layout.size() < 3)
@@ -22,25 +22,45 @@ NetEngine::Net::Net(const std::vector<uint32_t>& layout, float eta, float eta_bi
     // Seed random number generator to get new random numbers each time.
     std::srand((unsigned)std::time(0));
 
-    // Initialize weight matrices, add one column for bias.
-    for (size_t i = 0; i < layout.size() - 1; i++) {
-        float* weights;
-        uint32_t rows = layout[i + 1];
-        uint32_t cols = layout[i] + 1;
+    // Check if CUDA capable device is available.
+    int cuda_device;
+    if (try_cuda && cudaGetDevice(&cuda_device) == cudaSuccess) {
+        m_cuda_enabled = true;
 
-        TRY_CUDA(cudaMalloc(&weights, rows * cols * sizeof(float)));
+        // Initialize weight matrices, add one column for bias.
+        for (size_t i = 0; i < layout.size() - 1; i++) {
+            float* weights;
+            uint32_t rows = layout[i + 1];
+            uint32_t cols = layout[i] + 1;
 
-        // Set weight matrix to random values in range [+- 1/sqrt(number of neurons in layer)].
-        for (uint32_t r = 0; r < rows; r++)
-            for (uint32_t c = 0; c < cols; c++)
-                set_value<<<1, 1>>>(&weights[r * cols + c],
-                                    (((float)std::rand() / RAND_MAX) * 2.0f - 1.0f) /
-                                        sqrt(cols - 1));
+            TRY_CUDA(cudaMalloc(&weights, rows * cols * sizeof(float)));
 
-        TRY_CUDA(cudaDeviceSynchronize());
+            // Set weight matrix to random values in range [+- 1/sqrt(number of neurons in layer)].
+            for (uint32_t r = 0; r < rows; r++)
+                for (uint32_t c = 0; c < cols; c++)
+                    set_value<<<1, 1>>>(&weights[r * cols + c],
+                                        (((float)std::rand() / RAND_MAX) * 2.0f - 1.0f) /
+                                            sqrt(cols - 1));
 
-        CudaMatrix cuda_matrix = {weights, rows, cols};
-        m_weights.push_back(cuda_matrix);
+            TRY_CUDA(cudaDeviceSynchronize());
+
+            CudaMatrix cuda_matrix = {weights, rows, cols};
+            m_weights_cuda.push_back(cuda_matrix);
+        }
+    } else {
+        m_cuda_enabled = false;
+
+        // Initialize weight matrices, add column for bias
+        for (size_t i = 0; i < layout.size() - 1; i++)
+            m_weights_eigen.push_back(Eigen::MatrixXf(layout[i + 1], layout[i] + 1));
+
+        for (auto& i : m_weights_eigen) {
+            // Set weight matrix to random values in range [-1, 1].
+            i.setRandom();
+
+            // Change range to [+- 1/sqrt(number of neurons in layer)].
+            i / sqrt(i.cols() - 1);
+        }
     }
 }
 
@@ -48,12 +68,13 @@ NetEngine::Net::Net(const std::vector<uint32_t>& layout, float eta, float eta_bi
 // Destructor
 //--------------------------------------------------------------------------------------------------
 NetEngine::Net::~Net() {
-    for (auto& i : m_weights)
-        TRY_CUDA(cudaFree(i.data));
+    if (m_cuda_enabled)
+        for (auto& i : m_weights_cuda)
+            TRY_CUDA(cudaFree(i.data));
 }
 
 //--------------------------------------------------------------------------------------------------
-// get, set
+// Getters and setters.
 //--------------------------------------------------------------------------------------------------
 float NetEngine::Net::get_eta() {
     return m_eta;
@@ -66,6 +87,9 @@ float NetEngine::Net::get_eta_bias() {
 }
 void NetEngine::Net::set_eta_bias(float eta_bias) {
     m_eta_bias = eta_bias;
+}
+bool NetEngine::Net::cuda_enabled() {
+    return m_cuda_enabled;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -92,8 +116,49 @@ std::string NetEngine::Net::info_string() {
 //--------------------------------------------------------------------------------------------------
 size_t NetEngine::Net::n_parameters() {
     size_t n = 0;
-    for (auto& i : m_weights)
-        n += i.rows * i.cols;
+
+    if (m_cuda_enabled)
+        for (auto& i : m_weights_cuda)
+            n += i.rows * i.cols;
+    else
+        for (auto& i : m_weights_eigen)
+            n += i.rows() * i.cols();
 
     return n;
+}
+
+//--------------------------------------------------------------------------------------------------
+// Run one sample through the network.
+//--------------------------------------------------------------------------------------------------
+std::vector<float> NetEngine::Net::run(const std::vector<float>& sample) {
+    // Delegate to Eigen or CUDA.
+    if (m_cuda_enabled)
+        return run_cuda(sample);
+    else
+        return run_eigen(sample);
+}
+
+//--------------------------------------------------------------------------------------------------
+// Train the network using backpropagation.
+//--------------------------------------------------------------------------------------------------
+size_t NetEngine::Net::train(const std::vector<std::vector<float>>& samples,
+                             const std::vector<std::vector<uint8_t>>& labels, size_t n_samples,
+                             size_t start_pos) {
+    // Delegate to Eigen or CUDA.
+    if (m_cuda_enabled)
+        return train_cuda(samples, labels, n_samples, start_pos);
+    else
+        return train_eigen(samples, labels, n_samples, start_pos);
+}
+
+//--------------------------------------------------------------------------------------------------
+// Test accuracy.
+//--------------------------------------------------------------------------------------------------
+float NetEngine::Net::test(const std::vector<std::vector<float>>& samples,
+                           const std::vector<std::vector<uint8_t>>& labels) {
+    // Delegate to Eigen or CUDA.
+    if (m_cuda_enabled)
+        return test_cuda(samples, labels);
+    else
+        return test_eigen(samples, labels);
 }

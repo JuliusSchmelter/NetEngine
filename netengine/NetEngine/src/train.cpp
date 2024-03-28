@@ -5,6 +5,7 @@
 #include "Exceptions.h"
 #include "Net.h"
 
+// By combining multiple samples to mini batches, the training can be executed on multiple threads.
 #define MINI_BATCH_SIZE 32
 
 //--------------------------------------------------------------------------------------------------

@@ -1,3 +1,5 @@
+// Expose C++ API to Python.
+
 #include "pybind11/include/pybind11/pybind11.h"
 #include "pybind11/include/pybind11/stl.h"
 

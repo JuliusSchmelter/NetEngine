@@ -102,7 +102,7 @@ bool NetEngine::Net::cuda_enabled() {
 }
 
 //--------------------------------------------------------------------------------------------------
-// Print info string.
+// Return info string.
 //--------------------------------------------------------------------------------------------------
 std::string NetEngine::Net::info_string() {
     std::stringstream output;

@@ -1,3 +1,5 @@
+// This file can be used to test the C++ API using the MNIST hand-written digit dataset.
+
 #include "netengine/NetEngine/DevTools.h"
 #include "netengine/NetEngine/Net.h"
 

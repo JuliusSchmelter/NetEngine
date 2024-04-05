@@ -107,7 +107,6 @@ size_t NetEngine::Net::train_eigen(const std::vector<std::vector<float>>& sample
 
 //--------------------------------------------------------------------------------------------------
 // Calculate deltas for given samples and labels.
-// Note: passing Eigen::Map instead of Eigen::Vector is necessary to preserve constness.
 void NetEngine::Net::train_worker_eigen(const std::vector<std::vector<float>>& samples,
                                         const std::vector<std::vector<uint8_t>>& labels,
                                         size_t n_samples, size_t start_pos,
